@@ -1,7 +1,7 @@
 /** Google Calendar plugin
  *
  * Copyright (c) 2006 Eduardo Pereira Habkost <ehabkost@raisama.net>
- * Copyright (c) 2008  Adenilson Cavalcanti da Silva <adenilson.silva@indt.org.br>
+ * Copyright (c) 2008 Adenilson Cavalcanti da Silva <adenilson.silva@indt.org.br>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * GNU General Lesser Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
@@ -25,6 +25,10 @@
  * - review code for leaks (I'm not sure if I'm using opensync API correctly...)
  *
  */
+
+#define _XOPEN_SOURCE /* man page say: glibc2 needs this */
+#include <time.h>
+#include <sys/time.h>
 
 #include <opensync/opensync.h>
 #include <opensync/opensync-plugin.h>
@@ -48,6 +52,39 @@
 #include <gcalendar.h>
 #include <gcontact.h>
 #include "xslt_aux.h"
+
+
+static int timestamp_cmp(char *timestamp1, char *timestamp2)
+{
+	/* timestamp (RFC3339) formating string */
+	char format[] = "%FT%T";
+	struct tm first, second;
+	time_t t_first, t_second;
+	int result = 0;
+
+	if (!timestamp1 || !timestamp2)
+		return 1;
+
+	/* From timestamp string to time structure */
+	strptime(timestamp1, format, &first);
+	strptime(timestamp2, format, &second);
+
+	/* From time structure to calendar time (since
+	 * Epoch (00:00:00 UTC, January 1, 1970)
+	 */
+	t_first = mktime(&first);
+	t_second = mktime(&second);
+
+	if (t_first == t_second)
+		result = 0;
+	else if (t_first > t_second)
+		result = 1;
+	else if (t_first < t_second)
+		result = -1;
+
+	return result;
+
+}
 
 struct gc_plgdata
 {
@@ -231,6 +268,16 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 		if (!event)
 			goto error;
 
+		osync_trace(TRACE_INTERNAL, "gevent: timestamp:%s\tevent:%s\n",
+			    timestamp, gcal_event_get_updated(event));
+		/* Workaround for inclusive returned results */
+		if ((timestamp_cmp(timestamp, gcal_event_get_updated(event)) == 0)
+		    && !slow_sync_flag) {
+			osync_trace(TRACE_INTERNAL, "gevent: old event.");
+			continue;
+		} else
+			osync_trace(TRACE_INTERNAL, "gevent: new event!");
+
 		raw_xml = gcal_event_get_xml(event);
 		if ((result = xslt_transform(plgdata->xslt_ctx_gcal,
 					     raw_xml)))
@@ -366,6 +413,16 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 		contact = gcal_contact_element(&(plgdata->all_contacts), i);
 		if (!contact)
 			goto error;
+
+		osync_trace(TRACE_INTERNAL, "gcontact: timestamp:%s\tcontact:%s\n",
+			    timestamp, gcal_contact_get_updated(contact));
+		/* Workaround for inclusive returned results */
+		if ((timestamp_cmp(timestamp, gcal_contact_get_updated(contact)) == 0)
+		    && !slow_sync_flag) {
+			osync_trace(TRACE_INTERNAL, "gcontact: old contact.");
+			continue;
+		} else
+			osync_trace(TRACE_INTERNAL, "gcontact: new contact!");
 
 		raw_xml = gcal_contact_get_xml(contact);
 		if ((result = xslt_transform(plgdata->xslt_ctx_gcont,
@@ -653,10 +710,6 @@ static void gc_sync_done(void *data, OSyncPluginInfo *info, OSyncContext *ctx)
 	OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 
 	if (plgdata->calendar && plgdata->cal_timestamp) {
-		/* FIXME: hack to workaround the limitation of google protocol
-		 * doing inclusive query: advance 1 second in timestamp.
-		 */
-		plgdata->cal_timestamp[18] += 1;
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cal_timestamp);
 		osync_anchor_update(plgdata->gcal_anchor_path, "gcalendar",
@@ -664,10 +717,6 @@ static void gc_sync_done(void *data, OSyncPluginInfo *info, OSyncContext *ctx)
 	}
 
 	if (plgdata->contacts && plgdata->cont_timestamp) {
-		/* FIXME: hack to workaround the limitation of google protocol
-		 * doing inclusive query: advance 1 second in timestamp.
-		 */
-		plgdata->cont_timestamp[18] += 1;
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cont_timestamp);
 		osync_anchor_update(plgdata->gcont_anchor_path, "gcontact",
