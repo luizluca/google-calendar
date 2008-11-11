@@ -272,11 +272,12 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 			    timestamp, gcal_event_get_updated(event));
 		/* Workaround for inclusive returned results */
 		if ((timestamp_cmp(timestamp, gcal_event_get_updated(event)) == 0)
-		    && !slow_sync_flag) {
+		    && !slow_sync_flag
+		    && !gcal_event_is_deleted(event)) {
 			osync_trace(TRACE_INTERNAL, "gevent: old event.");
 			continue;
 		} else
-			osync_trace(TRACE_INTERNAL, "gevent: new event!");
+			osync_trace(TRACE_INTERNAL, "gevent: new or deleted event!");
 
 		raw_xml = gcal_event_get_xml(event);
 		if ((result = xslt_transform(plgdata->xslt_ctx_gcal,
@@ -311,8 +312,10 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 		if (slow_sync_flag)
 			osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_ADDED);
 		else
-			if (gcal_event_is_deleted(event))
+			if (gcal_event_is_deleted(event)) {
 				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_DELETED);
+				osync_trace(TRACE_INTERNAL, "deleted entry!");
+			}
 			else
 				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_MODIFIED);
 
@@ -378,6 +381,7 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 
 	} else {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for fast syncing...\n");
+		gcal_deleted(plgdata->contacts, SHOW);
 		result = gcal_get_updated_contacts(plgdata->contacts,
 						   &(plgdata->all_contacts),
 						   timestamp);
@@ -418,11 +422,12 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 			    timestamp, gcal_contact_get_updated(contact));
 		/* Workaround for inclusive returned results */
 		if ((timestamp_cmp(timestamp, gcal_contact_get_updated(contact)) == 0)
-		    && !slow_sync_flag) {
+		    && !slow_sync_flag
+		    && !gcal_contact_is_deleted(contact)) {
 			osync_trace(TRACE_INTERNAL, "gcontact: old contact.");
 			continue;
 		} else
-			osync_trace(TRACE_INTERNAL, "gcontact: new contact!");
+			osync_trace(TRACE_INTERNAL, "gcontact: new or deleted contact!");
 
 		raw_xml = gcal_contact_get_xml(contact);
 		if ((result = xslt_transform(plgdata->xslt_ctx_gcont,
@@ -458,8 +463,10 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 		if (slow_sync_flag)
 			osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_ADDED);
 		else
-			if (gcal_contact_is_deleted(contact))
+			if (gcal_contact_is_deleted(contact)) {
 				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_DELETED);
+				osync_trace(TRACE_INTERNAL, "deleted entry!");
+			}
 			else
 				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_MODIFIED);
 
