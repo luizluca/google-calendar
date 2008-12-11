@@ -97,7 +97,7 @@ osync_bool get_format_info(OSyncFormatEnv *env, OSyncError **error)
 	osync_objformat_unref(gevent);
 }
 
-void *initialize(OSyncError **error)
+void *gc_data_initialize(OSyncError **error)
 {
 	struct xslt_resources *converter = NULL;
 	converter = xslt_new();
@@ -105,7 +105,7 @@ void *initialize(OSyncError **error)
 	return converter;
 }
 
-void finalize(void *userdata)
+void gc_data_finalize(void *userdata)
 {
 	struct xslt_resources *converter = NULL;
 	if (!userdata)
@@ -134,16 +134,16 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, xml_contact, gcontact,
 				   xmlcontact_to_gcontact, &error);
 	osync_assert(conv);
-	osync_converter_set_initialize_func(conv, initialize);
-	osync_converter_set_finalize_func(conv, finalize);
+	osync_converter_set_initialize_func(conv, gc_data_initialize);
+	osync_converter_set_finalize_func(conv, gc_data_finalize);
 	osync_format_env_register_converter(env, conv);
 	osync_converter_unref(conv);
 
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, xml_event, gevent,
 				   xmlevent_to_gevent, &error);
 	osync_assert(conv);
-	osync_converter_set_initialize_func(conv, initialize);
-	osync_converter_set_finalize_func(conv, finalize);
+	osync_converter_set_initialize_func(conv, gc_data_initialize);
+	osync_converter_set_finalize_func(conv, gc_data_finalize);
 	osync_format_env_register_converter(env, conv);
 	osync_converter_unref(conv);
 
@@ -151,16 +151,16 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, gcontact, xml_contact,
 				   gcontact_to_xmlcontact, &error);
 	osync_assert(conv);
-	osync_converter_set_initialize_func(conv, initialize);
-	osync_converter_set_finalize_func(conv, finalize);
+	osync_converter_set_initialize_func(conv, gc_data_initialize);
+	osync_converter_set_finalize_func(conv, gc_data_finalize);
 	osync_format_env_register_converter(env, conv);
 	osync_converter_unref(conv);
 
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, gevent, xml_event,
 				   gevent_to_xmlevent, &error);
 	osync_assert(conv);
-	osync_converter_set_initialize_func(conv, initialize);
-	osync_converter_set_finalize_func(conv, finalize);
+	osync_converter_set_initialize_func(conv, gc_data_initialize);
+	osync_converter_set_finalize_func(conv, gc_data_finalize);
 
 	osync_format_env_register_converter(env, conv);
 	osync_converter_unref(conv);
