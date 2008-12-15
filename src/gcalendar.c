@@ -506,19 +506,25 @@ static void gc_commit_change_calendar(void *data, OSyncPluginInfo *info,
 	OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	struct gc_plgdata *plgdata = data;
 	gcal_event event = NULL;
-
 	int size, result;
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_event = NULL;
 	OSyncData *odata = NULL;
+	OSyncXMLFormat *xmlformat = NULL;
 
 	if (!(odata = osync_change_get_data(change))) {
 		msg = "Cannot get raw data from change obj!\n";
 		goto error;
 	}
 
-	osync_data_get_data(odata, &osync_xml, &size);
+	osync_data_get_data(odata, &xmlformat, &size);
 	if (!osync_xml) {
-		msg = "Failed getting xml from change obj!\n";
+		msg = "Failed getting xmlobj from change obj!\n";
+		goto error;
+	}
+
+	osync_xmlformat_assemble(xmlformat, &osync_xml, &size);
+	if (!osync_xml) {
+		msg = "Failed getting xml from xmlobj!\n";
 		goto error;
 	}
 
