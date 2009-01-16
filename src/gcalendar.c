@@ -778,7 +778,7 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	OSyncList *r;
 	const char *objtype, *tmp;
 	int i, numobjs;
-	char *msg_error = "no msg.";
+
 	osync_error_set(error, OSYNC_ERROR_GENERIC, "no msg");
 	plgdata = osync_try_malloc0(sizeof(struct gc_plgdata), error);
 	config = osync_plugin_info_get_config(info);
@@ -862,14 +862,14 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		OSyncFormatEnv *formatenv1 = osync_plugin_info_get_format_env(info);
 		plgdata->gcal_format = osync_format_env_find_objformat(formatenv1, "xmlformat-event");
 		if (!plgdata->gcal_format) {
-			msg_error = "Failed to find objformat xmlformat-event!";
+			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-event!");
 			goto error_freeplg;
 		}
 		osync_objformat_ref(plgdata->gcal_format);
 
 		plgdata->gcal_sink = osync_plugin_info_find_objtype(info, "event");
 		if (!plgdata->gcal_sink) {
-			msg_error = "Failed to find objtype event!";
+			osync_trace(TRACE_ERROR, "%s", "Failed to find objtype event!");
 			goto error_freeplg;
 		}
 
@@ -877,9 +877,10 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		osync_plugin_info_add_objtype(info, plgdata->gcal_sink);
 
 		osync_objtype_sink_enable_anchor(plgdata->gcal_sink, TRUE);
-		if (!(plgdata->gcalendar_anchor = osync_objtype_sink_get_anchor(plgdata->gcal_sink)))
+		if (!(plgdata->gcalendar_anchor = osync_objtype_sink_get_anchor(plgdata->gcal_sink))) {
+			osync_trace(TRACE_ERROR, "%s", "Failed getting calendar anchor!");
 			goto error_freeplg;
-
+		}
 	}
 
 	OSyncObjTypeSinkFunctions functions_gcont;
@@ -895,14 +896,14 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		OSyncFormatEnv *formatenv2 = osync_plugin_info_get_format_env(info);
 		plgdata->gcont_format = osync_format_env_find_objformat(formatenv2, "xmlformat-contact");
 		if (!plgdata->gcont_format) {
-			msg_error = "Failed to find objformat xmlformat-contact!";
+			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-contact!");
 			goto error_freeplg;
 		}
 		osync_objformat_ref(plgdata->gcont_format);
 
 		plgdata->gcont_sink = osync_plugin_info_find_objtype(info, "contact");
 		if (!plgdata->gcont_sink) {
-			msg_error = "Failed to find objtype contact!";
+			osync_trace(TRACE_ERROR, "%s", "Failed to find objtype contact!");
 			goto error_freeplg;
 		}
 
@@ -910,9 +911,10 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		osync_plugin_info_add_objtype(info, plgdata->gcont_sink);
 
 		osync_objtype_sink_enable_anchor(plgdata->gcont_sink, TRUE);
-		if (!(plgdata->gcontact_anchor = osync_objtype_sink_get_anchor(plgdata->gcont_sink)))
+		if (!(plgdata->gcontact_anchor = osync_objtype_sink_get_anchor(plgdata->gcont_sink))) {
+			osync_trace(TRACE_ERROR, "%s", "Failed getting contact anchor!");
 			goto error_freeplg;
-
+		}
 	}
 
 	if (plgdata->calendar)
@@ -935,7 +937,7 @@ error_freeplg:
 	if (plgdata)
 		free_plg(plgdata);
 out:
-	osync_trace(TRACE_EXIT_ERROR, "%s: %s: %s", __func__, msg_error, osync_error_print(error));
+	osync_trace(TRACE_EXIT_ERROR, "%s: %s", __func__, osync_error_print(error));
 	return NULL;
 }
 
