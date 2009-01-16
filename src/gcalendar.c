@@ -54,7 +54,6 @@
 #include <gcontact.h>
 #include "xslt_aux.h"
 
-
 static int timestamp_cmp(char *timestamp1, char *timestamp2)
 {
 	/* timestamp (RFC3339) formating string */
@@ -92,8 +91,6 @@ struct gc_plgdata
 	char *url;
 	char *username;
 	char *password;
-	char *gcal_anchor_path;
-	char *gcont_anchor_path;
 	char *timezone;
 	char *xslt_path;
 	/* libgcal resources */
@@ -103,6 +100,9 @@ struct gc_plgdata
 	gcal_t contacts;
 	struct gcal_event_array all_events;
 	struct gcal_contact_array all_contacts;
+	/* anchor objects */
+	OSyncAnchor *gcontact_anchor;
+	OSyncAnchor *gcalendar_anchor;
 	/* calendar sink/format */
 	OSyncObjTypeSink *gcal_sink;
 	OSyncObjFormat *gcal_format;
@@ -125,10 +125,6 @@ static void free_plg(struct gc_plgdata *plgdata)
 		gcal_cleanup_contacts(&(plgdata->all_contacts));
 	}
 
-	if (plgdata->gcal_anchor_path)
-		g_free(plgdata->gcal_anchor_path);
-	if (plgdata->gcont_anchor_path)
-		g_free(plgdata->gcont_anchor_path);
 	if (plgdata->xslt_path)
 		free(plgdata->xslt_path);
 	if (plgdata->xslt_ctx_gcal)
@@ -217,10 +213,11 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
 	gcal_event event;
+	OSyncError *anchor_error;
 
 	if (!plgdata->gcal_sink)
 		return;
-	timestamp = osync_anchor_retrieve(plgdata->gcal_anchor_path, "gcalendar");
+	timestamp = osync_anchor_retrieve(plgdata->gcalendar_anchor, &anchor_error);
 	if (timestamp)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
 	else
@@ -365,11 +362,11 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
 	gcal_contact contact;
-	slow_sync_flag = 0;
+	OSyncError *anchor_error;
 
 	if (!plgdata->gcont_sink)
 		return;
-	timestamp = osync_anchor_retrieve(plgdata->gcont_anchor_path, "gcontact");
+	timestamp = osync_anchor_retrieve(plgdata->gcontact_anchor, &anchor_error);
 	if (timestamp)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
 	else
@@ -733,19 +730,20 @@ static void gc_sync_done(void *data, OSyncPluginInfo *info, OSyncContext *ctx)
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	struct gc_plgdata *plgdata = data;
 	OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
+	OSyncError *anchor_error;
 
 	if (plgdata->calendar && plgdata->cal_timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cal_timestamp);
-		osync_anchor_update(plgdata->gcal_anchor_path, "gcalendar",
-				    plgdata->cal_timestamp);
+		osync_anchor_update(plgdata->gcalendar_anchor, plgdata->cal_timestamp,
+				    &anchor_error);
 	}
 
 	if (plgdata->contacts && plgdata->cont_timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cont_timestamp);
-		osync_anchor_update(plgdata->gcont_anchor_path, "gcontact",
-				    plgdata->cont_timestamp);
+		osync_anchor_update(plgdata->gcontact_anchor, plgdata->cont_timestamp,
+				    &anchor_error);
 	}
 
 	osync_context_report_success(ctx);
@@ -780,7 +778,8 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	OSyncList *r;
 	const char *objtype, *tmp;
 	int i, numobjs;
-
+	char *msg_error = "no msg.";
+	osync_error_set(error, OSYNC_ERROR_GENERIC, "no msg");
 	plgdata = osync_try_malloc0(sizeof(struct gc_plgdata), error);
 	config = osync_plugin_info_get_config(info);
 	if ((!plgdata) || (!config)) {
@@ -862,16 +861,24 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		osync_trace(TRACE_INTERNAL, "\tcreating calendar sink...\n");
 		OSyncFormatEnv *formatenv1 = osync_plugin_info_get_format_env(info);
 		plgdata->gcal_format = osync_format_env_find_objformat(formatenv1, "xmlformat-event");
-		if (!plgdata->gcal_format)
+		if (!plgdata->gcal_format) {
+			msg_error = "Failed to find objformat xmlformat-event!";
 			goto error_freeplg;
+		}
 		osync_objformat_ref(plgdata->gcal_format);
 
 		plgdata->gcal_sink = osync_plugin_info_find_objtype(info, "event");
-		if (!plgdata->gcal_sink)
+		if (!plgdata->gcal_sink) {
+			msg_error = "Failed to find objtype event!";
 			goto error_freeplg;
+		}
 
 		osync_objtype_sink_set_functions(plgdata->gcal_sink, functions_gcal, plgdata);
 		osync_plugin_info_add_objtype(info, plgdata->gcal_sink);
+
+		osync_objtype_sink_enable_anchor(plgdata->gcal_sink, TRUE);
+		if (!(plgdata->gcalendar_anchor = osync_objtype_sink_get_anchor(plgdata->gcal_sink)))
+			goto error_freeplg;
 
 	}
 
@@ -887,33 +894,26 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		osync_trace(TRACE_INTERNAL, "\tcreating contact sink...\n");
 		OSyncFormatEnv *formatenv2 = osync_plugin_info_get_format_env(info);
 		plgdata->gcont_format = osync_format_env_find_objformat(formatenv2, "xmlformat-contact");
-		if (!plgdata->gcont_format)
+		if (!plgdata->gcont_format) {
+			msg_error = "Failed to find objformat xmlformat-contact!";
 			goto error_freeplg;
+		}
 		osync_objformat_ref(plgdata->gcont_format);
 
 		plgdata->gcont_sink = osync_plugin_info_find_objtype(info, "contact");
-		if (!plgdata->gcont_sink)
+		if (!plgdata->gcont_sink) {
+			msg_error = "Failed to find objtype contact!";
 			goto error_freeplg;
+		}
 
 		osync_objtype_sink_set_functions(plgdata->gcont_sink, functions_gcont, plgdata);
 		osync_plugin_info_add_objtype(info, plgdata->gcont_sink);
 
+		osync_objtype_sink_enable_anchor(plgdata->gcont_sink, TRUE);
+		if (!(plgdata->gcontact_anchor = osync_objtype_sink_get_anchor(plgdata->gcont_sink)))
+			goto error_freeplg;
+
 	}
-
-
-	plgdata->gcal_anchor_path = g_strdup_printf("%s/calendar_anchor.db",
-						    osync_plugin_info_get_configdir(info));
-	if (!(plgdata->gcal_anchor_path))
-		goto error_freeplg;
-	else
-		osync_trace(TRACE_INTERNAL, "\tanchor: %s\n", plgdata->gcal_anchor_path);
-
-	plgdata->gcont_anchor_path = g_strdup_printf("%s/contact_anchor.db",
-						    osync_plugin_info_get_configdir(info));
-	if (!(plgdata->gcont_anchor_path))
-		goto error_freeplg;
-	else
-		osync_trace(TRACE_INTERNAL, "\tanchor: %s\n", plgdata->gcont_anchor_path);
 
 	if (plgdata->calendar)
 		if (!(plgdata->xslt_ctx_gcal = xslt_new()))
@@ -935,7 +935,7 @@ error_freeplg:
 	if (plgdata)
 		free_plg(plgdata);
 out:
-	osync_trace(TRACE_EXIT_ERROR, "%s: %s", __func__, osync_error_print(error));
+	osync_trace(TRACE_EXIT_ERROR, "%s: %s: %s", __func__, msg_error, osync_error_print(error));
 	return NULL;
 }
 
