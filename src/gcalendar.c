@@ -100,9 +100,6 @@ struct gc_plgdata
 	gcal_t contacts;
 	struct gcal_event_array all_events;
 	struct gcal_contact_array all_contacts;
-	/* anchor objects */
-	OSyncAnchor *gcontact_anchor;
-	OSyncAnchor *gcalendar_anchor;
 	/* calendar sink/format */
 	OSyncObjTypeSink *gcal_sink;
 	OSyncObjFormat *gcal_format;
@@ -217,8 +214,8 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 
 	if (!plgdata->gcal_sink)
 		return;
-	osync_assert(plgdata->gcalendar_anchor);
-	timestamp = osync_anchor_retrieve(plgdata->gcalendar_anchor, &anchor_error);
+	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcal_sink),
+					  &anchor_error);
 	if (timestamp)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
 	else
@@ -367,8 +364,9 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 
 	if (!plgdata->gcont_sink)
 		return;
-	osync_assert(plgdata->gcontact_anchor);
-	timestamp = osync_anchor_retrieve(plgdata->gcontact_anchor, &anchor_error);
+
+	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcont_sink),
+					  &anchor_error);
 	if (timestamp)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
 	else
@@ -737,17 +735,15 @@ static void gc_sync_done(void *data, OSyncPluginInfo *info, OSyncContext *ctx)
 	if (plgdata->calendar && plgdata->cal_timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cal_timestamp);
-		osync_assert(plgdata->gcalendar_anchor);
-		osync_anchor_update(plgdata->gcalendar_anchor, plgdata->cal_timestamp,
-				    &anchor_error);
+		osync_anchor_update(osync_objtype_sink_get_anchor(plgdata->gcal_sink),
+				    plgdata->cal_timestamp, &anchor_error);
 	}
 
 	if (plgdata->contacts && plgdata->cont_timestamp) {
-		osync_assert(plgdata->gcontact_anchor);
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cont_timestamp);
-		osync_anchor_update(plgdata->gcontact_anchor, plgdata->cont_timestamp,
-				    &anchor_error);
+		osync_anchor_update(osync_objtype_sink_get_anchor(plgdata->gcont_sink),
+				    plgdata->cont_timestamp, &anchor_error);
 	}
 
 	osync_context_report_success(ctx);
@@ -880,11 +876,7 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		osync_objtype_sink_set_functions(plgdata->gcal_sink, functions_gcal, plgdata);
 		osync_plugin_info_add_objtype(info, plgdata->gcal_sink);
 
-		osync_objtype_sink_enable_anchor(plgdata->gcal_sink, TRUE);
-		if (!(plgdata->gcalendar_anchor = osync_objtype_sink_get_anchor(plgdata->gcal_sink))) {
-			osync_trace(TRACE_ERROR, "%s", "Failed getting calendar anchor!");
-			goto error_freeplg;
-		}
+ 		osync_objtype_sink_enable_anchor(plgdata->gcal_sink, TRUE);
 	}
 
 	OSyncObjTypeSinkFunctions functions_gcont;
@@ -915,10 +907,6 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		osync_plugin_info_add_objtype(info, plgdata->gcont_sink);
 
 		osync_objtype_sink_enable_anchor(plgdata->gcont_sink, TRUE);
-		if (!(plgdata->gcontact_anchor = osync_objtype_sink_get_anchor(plgdata->gcont_sink))) {
-			osync_trace(TRACE_ERROR, "%s", "Failed getting contact anchor!");
-			goto error_freeplg;
-		}
 	}
 
 	if (plgdata->calendar)
