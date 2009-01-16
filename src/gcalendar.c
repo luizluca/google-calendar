@@ -202,7 +202,6 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 	static int counter = 0;
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
-	OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	OSyncError *error = NULL;
 	OSyncXMLFormat *xmlformat;
 	OSyncData *odata = NULL;
@@ -212,14 +211,21 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 	gcal_event event;
 	OSyncError *anchor_error;
 
-	if (!plgdata->gcal_sink)
-		return;
+	if ((!plgdata->gcal_sink = osync_plugin_info_get_sink(info)))
+		goto error;
+	if (!(osync_objtype_sink_get_anchor(plgdata->gcal_sink)))
+		goto error;
+
 	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcal_sink),
 					  &anchor_error);
-	if (timestamp)
+	if (strlen(timestamp) > 0)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
-	else
+	else {
+		if (timestamp)
+			free(timestamp);
+		timestamp = NULL;
 		osync_trace(TRACE_INTERNAL, "first sync!\n");
+	}
 
 	if (osync_objtype_sink_get_slowsync(plgdata->gcal_sink)) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcal: Client asked for slow syncing...\n");
@@ -352,7 +358,6 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 	static int counter = 0;
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
-	OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	OSyncError *error = NULL;
 	OSyncXMLFormat *xmlformat;
 	OSyncData *odata = NULL;
@@ -362,15 +367,22 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 	gcal_contact contact;
 	OSyncError *anchor_error;
 
-	if (!plgdata->gcont_sink)
-		return;
+	if (!(plgdata->gcont_sink = osync_plugin_info_get_sink(info)))
+		goto error;
+
+	if (!(osync_objtype_sink_get_anchor(plgdata->gcont_sink)))
+		goto error;
 
 	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcont_sink),
 					  &anchor_error);
-	if (timestamp)
+	if (strlen(timestamp) > 0)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
-	else
+	else {
+		if (timestamp)
+			free(timestamp);
+		timestamp = NULL;
 		osync_trace(TRACE_INTERNAL, "first sync!\n");
+	}
 
 	if (osync_objtype_sink_get_slowsync(plgdata->gcont_sink)) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for slow syncing...\n");
@@ -904,9 +916,9 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		}
 
 		osync_objtype_sink_set_functions(plgdata->gcont_sink, functions_gcont, plgdata);
+		osync_objtype_sink_enable_anchor(plgdata->gcont_sink, TRUE);
 		osync_plugin_info_add_objtype(info, plgdata->gcont_sink);
 
-		osync_objtype_sink_enable_anchor(plgdata->gcont_sink, TRUE);
 	}
 
 	if (plgdata->calendar)
