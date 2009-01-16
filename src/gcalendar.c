@@ -779,7 +779,7 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	const char *objtype, *tmp;
 	int i, numobjs;
 
-	osync_error_set(error, OSYNC_ERROR_GENERIC, "no msg");
+	//osync_error_set(error, OSYNC_ERROR_GENERIC, "no msg");
 	plgdata = osync_try_malloc0(sizeof(struct gc_plgdata), error);
 	config = osync_plugin_info_get_config(info);
 	if ((!plgdata) || (!config)) {
@@ -933,7 +933,7 @@ out:
 	return NULL;
 }
 
-static osync_bool gc_discover(void *data, OSyncPluginInfo *info, OSyncError **error)
+static osync_bool gc_discover(OSyncPluginInfo *info, void *data, OSyncError **error)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, error);
 
