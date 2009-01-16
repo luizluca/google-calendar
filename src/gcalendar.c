@@ -217,6 +217,7 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 
 	if (!plgdata->gcal_sink)
 		return;
+	osync_assert(plgdata->gcalendar_anchor);
 	timestamp = osync_anchor_retrieve(plgdata->gcalendar_anchor, &anchor_error);
 	if (timestamp)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
@@ -366,6 +367,7 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 
 	if (!plgdata->gcont_sink)
 		return;
+	osync_assert(plgdata->gcontact_anchor);
 	timestamp = osync_anchor_retrieve(plgdata->gcontact_anchor, &anchor_error);
 	if (timestamp)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
@@ -735,11 +737,13 @@ static void gc_sync_done(void *data, OSyncPluginInfo *info, OSyncContext *ctx)
 	if (plgdata->calendar && plgdata->cal_timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cal_timestamp);
+		osync_assert(plgdata->gcalendar_anchor);
 		osync_anchor_update(plgdata->gcalendar_anchor, plgdata->cal_timestamp,
 				    &anchor_error);
 	}
 
 	if (plgdata->contacts && plgdata->cont_timestamp) {
+		osync_assert(plgdata->gcontact_anchor);
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cont_timestamp);
 		osync_anchor_update(plgdata->gcontact_anchor, plgdata->cont_timestamp,
