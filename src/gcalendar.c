@@ -203,7 +203,7 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
-	OSyncXMLFormat *xmlformat;
+	/* OSyncXMLFormat *xmlformat; */
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
 	int result = 0, i;
@@ -287,6 +287,7 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 			goto error;
 
 		raw_xml = plgdata->xslt_ctx_gcal->xml_str;
+		/*
 		xmlformat = osync_xmlformat_parse(raw_xml,
 						  strlen(raw_xml),
 						  &error);
@@ -299,6 +300,11 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 		osync_xmlformat_sort(xmlformat);
 		odata = osync_data_new(xmlformat,
 				       osync_xmlformat_size(),
+				       plgdata->gcal_format, &error);
+		*/
+
+		odata = osync_data_new(raw_xml,
+				       strlen(raw_xml),
 				       plgdata->gcal_format, &error);
 		if (!odata)
 			goto cleanup;
@@ -343,7 +349,7 @@ exit:
 
 cleanup:
 	osync_error_unref(&error);
-	osync_xmlformat_unref(&xmlformat);
+	/* osync_xmlformat_unref(&xmlformat); */
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
@@ -359,7 +365,7 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
-	OSyncXMLFormat *xmlformat;
+	/* OSyncXMLFormat *xmlformat; */
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
 	int result = 0, i;
@@ -443,7 +449,9 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 		if ((result = xslt_transform(plgdata->xslt_ctx_gcont,
 					     raw_xml)))
 			goto error;
+
 		raw_xml = plgdata->xslt_ctx_gcont->xml_str;
+		/*
 		xmlformat = osync_xmlformat_parse(raw_xml,
 						  strlen(raw_xml),
 						  &error);
@@ -458,7 +466,11 @@ static void gc_get_changes_contact(void *data, OSyncPluginInfo *info, OSyncConte
 		odata = osync_data_new(xmlformat,
 				       osync_xmlformat_size(),
 				       plgdata->gcont_format, &error);
+		*/
 
+		odata = osync_data_new(raw_xml,
+				       strlen(raw_xml),
+				       plgdata->gcont_format, &error);
 		if (!odata)
 			goto cleanup;
 
@@ -502,7 +514,7 @@ exit:
 
 cleanup:
 	osync_error_unref(&error);
-	osync_xmlformat_unref(&xmlformat);
+	/* osync_xmlformat_unref(&xmlformat); */
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
@@ -519,13 +531,15 @@ static void gc_commit_change_calendar(void *data, OSyncPluginInfo *info,
 	int size, result;
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_event = NULL;
 	OSyncData *odata = NULL;
-	OSyncXMLFormat *xmlformat = NULL;
+	/* OSyncXMLFormat *xmlformat = NULL; */
 
 	if (!(odata = osync_change_get_data(change))) {
 		msg = "Cannot get raw data from change obj!\n";
 		goto error;
 	}
 
+	//void osync_data_get_data(OSyncData *data, char **buffer, unsigned int *size)
+	/*
 	osync_data_get_data(odata, &xmlformat, &size);
 	if (!osync_xml) {
 		msg = "Failed getting xmlobj from change obj!\n";
@@ -533,6 +547,13 @@ static void gc_commit_change_calendar(void *data, OSyncPluginInfo *info,
 	}
 
 	osync_xmlformat_assemble(xmlformat, &osync_xml, &size);
+	if (!osync_xml) {
+		msg = "Failed getting xml from xmlobj!\n";
+		goto error;
+	}
+	*/
+
+	osync_data_get_data(odata, &osync_xml, &size);
 	if (!osync_xml) {
 		msg = "Failed getting xml from xmlobj!\n";
 		goto error;
@@ -634,13 +655,14 @@ static void gc_commit_change_contact(void *data, OSyncPluginInfo *info,
 	int size, result;
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_contact = NULL;
 	OSyncData *odata = NULL;
-	OSyncXMLFormat *xmlformat = NULL;
+	/* OSyncXMLFormat *xmlformat = NULL; */
 
 	if (!(odata = osync_change_get_data(change))) {
 		msg = "Cannot get raw data from change obj!\n";
 		goto error;
 	}
 
+	/*
 	osync_data_get_data(odata, &xmlformat, &size);
 	if (!xmlformat) {
 		msg = "Failed getting xmlobj from change obj!\n";
@@ -648,6 +670,13 @@ static void gc_commit_change_contact(void *data, OSyncPluginInfo *info,
 	}
 
 	osync_xmlformat_assemble(xmlformat, &osync_xml, &size);
+	if (!osync_xml) {
+		msg = "Failed getting xml from xmlobj!\n";
+		goto error;
+	}
+	*/
+
+	osync_data_get_data(odata, &osync_xml, &size);
 	if (!osync_xml) {
 		msg = "Failed getting xml from xmlobj!\n";
 		goto error;
