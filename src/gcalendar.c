@@ -218,14 +218,15 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 
 	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcal_sink),
 					  &anchor_error);
+	if (!timestamp) {
+		msg = "gcalendar: Anchor returned is NULL!";
+		goto error;
+	}
+
 	if (strlen(timestamp) > 0)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
-	else {
-		if (timestamp)
-			free(timestamp);
-		timestamp = NULL;
+	else
 		osync_trace(TRACE_INTERNAL, "first sync!\n");
-	}
 
 	if (osync_objtype_sink_get_slowsync(plgdata->gcal_sink)) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcal: Client asked for slow syncing...\n");
@@ -328,11 +329,15 @@ no_changes:
 	osync_trace(TRACE_INTERNAL, "\ndone calendar: %s\n", buffer);
 
 exit:
+	/* osync_anchor_retrieve uses osync_strdup */
+	osync_free(timestamp);
 	osync_context_report_success(ctx);
 	return;
 
 cleanup:
 	osync_error_unref(&error);
+	/* osync_anchor_retrieve uses osync_strdup */
+	osync_free(timestamp);
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
@@ -364,14 +369,15 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 
 	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcont_sink),
 					  &anchor_error);
+	if (!timestamp) {
+		msg = "gcontact: Anchor returned is NULL!";
+		goto error;
+	}
+
 	if (strlen(timestamp) > 0)
 		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
-	else {
-		if (timestamp)
-			free(timestamp);
-		timestamp = NULL;
+	else
 		osync_trace(TRACE_INTERNAL, "first sync!\n");
-	}
 
 	if (osync_objtype_sink_get_slowsync(plgdata->gcont_sink)) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for slow syncing...\n");
@@ -475,11 +481,15 @@ no_changes:
 	osync_trace(TRACE_INTERNAL, "\ndone contact: %s\n", buffer);
 
 exit:
+	/* osync_anchor_retrieve uses osync_strdup */
+	osync_free(timestamp);
 	osync_context_report_success(ctx);
 	return;
 
 cleanup:
 	osync_error_unref(&error);
+	/* osync_anchor_retrieve uses osync_strdup */
+	osync_free(timestamp);
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
