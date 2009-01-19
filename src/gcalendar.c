@@ -211,7 +211,7 @@ static void gc_get_changes_calendar(void *data, OSyncPluginInfo *info, OSyncCont
 	gcal_event event;
 	OSyncError *anchor_error;
 
-	if ((!plgdata->gcal_sink = osync_plugin_info_get_sink(info)))
+	if (!(plgdata->gcal_sink = osync_plugin_info_get_sink(info)))
 		goto error;
 	if (!(osync_objtype_sink_get_anchor(plgdata->gcal_sink)))
 		goto error;
