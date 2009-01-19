@@ -11,7 +11,8 @@ TARGET_LINK_LIBRARIES( gdata-format ${OPENSYNC_LIBRARIES} ${GLIB2_LIBRARIES} )
 
 ###### INSTALL ###################
 OPENSYNC_PLUGIN_INSTALL( gcalendar )
-OPENSYNC_FORMAT_INSTALL( gdata-format )
+#Dont install it, see https://svn.opensync.org/format-plugins/xsltformat
+#OPENSYNC_FORMAT_INSTALL( gdata-format )
 
 # Install config template
 OPENSYNC_PLUGIN_CONFIG( google-data )
