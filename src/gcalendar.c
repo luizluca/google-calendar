@@ -211,7 +211,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
 	gcal_event event;
-	OSyncError *anchor_error;
+	OSyncError *anchor_error = NULL;
 
 	if (!(plgdata->gcal_sink = osync_plugin_info_get_sink(info)))
 		goto error;
@@ -361,7 +361,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
 	gcal_contact contact;
-	OSyncError *anchor_error;
+	OSyncError *anchor_error = NULL;
 
 	if (!(plgdata->gcont_sink = osync_plugin_info_get_sink(info)))
 		goto error;
