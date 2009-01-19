@@ -191,7 +191,9 @@ static void gc_connect(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncConte
 	return;
 
 error:
-	osync_trace(TRACE_INTERNAL, "\nGood bye, cruel world...\n");
+	osync_trace(TRACE_INTERNAL, "Failed to load xslt stylesheet!\n");
+	osync_error_set(&error, OSYNC_ERROR_GENERIC,
+			"Unable load xslt stylesheet data.");
 	osync_context_report_osyncerror(ctx, &error);
 }
 
