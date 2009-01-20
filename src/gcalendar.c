@@ -593,7 +593,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *i
 
 	}
 
-	free(osync_xml);
+	//	free(osync_xml);
 
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
@@ -700,7 +700,7 @@ static void gc_commit_change_contact(void *data, OSyncPluginInfo *info,
 		gcal_contact_delete(contact);
 	}
 
-	free(osync_xml);
+	//free(osync_xml);
 
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
