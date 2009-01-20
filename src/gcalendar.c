@@ -290,7 +290,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 			goto error;
 
 		raw_xml = plgdata->xslt_ctx_gcal->xml_str;
-		odata = osync_data_new(raw_xml,
+		odata = osync_data_new(strdup(raw_xml),
 				       strlen(raw_xml),
 				       plgdata->gcal_format, &error);
 		if (!odata)
@@ -442,7 +442,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 			goto error;
 
 		raw_xml = plgdata->xslt_ctx_gcont->xml_str;
-		odata = osync_data_new(raw_xml,
+		odata = osync_data_new(strdup(raw_xml),
 				       strlen(raw_xml),
 				       plgdata->gcont_format, &error);
 		if (!odata)
@@ -847,7 +847,7 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	if (plgdata->calendar) {
 		osync_trace(TRACE_INTERNAL, "\tcreating calendar sink...\n");
 		OSyncFormatEnv *formatenv1 = osync_plugin_info_get_format_env(info);
-		plgdata->gcal_format = osync_format_env_find_objformat(formatenv1, "xmlformat-event");
+		plgdata->gcal_format = osync_format_env_find_objformat(formatenv1, "xmlformat-event-doc");
 		if (!plgdata->gcal_format) {
 			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-event!");
 			goto error_freeplg;
@@ -877,7 +877,7 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	if (plgdata->contacts) {
 		osync_trace(TRACE_INTERNAL, "\tcreating contact sink...\n");
 		OSyncFormatEnv *formatenv2 = osync_plugin_info_get_format_env(info);
-		plgdata->gcont_format = osync_format_env_find_objformat(formatenv2, "xmlformat-contact");
+		plgdata->gcont_format = osync_format_env_find_objformat(formatenv2, "xmlformat-contact-doc");
 		if (!plgdata->gcont_format) {
 			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-contact!");
 			goto error_freeplg;
