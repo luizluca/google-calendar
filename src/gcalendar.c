@@ -33,7 +33,7 @@
 #include <opensync/opensync.h>
 #include <opensync/opensync-plugin.h>
 #include <opensync/opensync-helper.h>
-#include <opensync/opensync-merger.h>
+#include <opensync/opensync-capabilities.h>
 #include <opensync/opensync-format.h>
 #include <opensync/opensync-xmlformat.h>
 #include <opensync/opensync-data.h>
