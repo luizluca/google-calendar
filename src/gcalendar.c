@@ -26,10 +26,6 @@
  *
  */
 
-#define _XOPEN_SOURCE /* man page say: glibc2 needs this */
-#include <time.h>
-#include <sys/time.h>
-
 #include <opensync/opensync.h>
 #include <opensync/opensync-plugin.h>
 #include <opensync/opensync-helper.h>
@@ -54,6 +50,10 @@
 #include <gcontact.h>
 #include "xslt_aux.h"
 
+#include "timestamp.h"
+#include <time.h>
+#include <sys/time.h>
+
 static int timestamp_cmp(char *timestamp1, char *timestamp2)
 {
 	/* timestamp (RFC3339) formating string */
@@ -66,8 +66,8 @@ static int timestamp_cmp(char *timestamp1, char *timestamp2)
 		return 1;
 
 	/* From timestamp string to time structure */
-	strptime(timestamp1, format, &first);
-	strptime(timestamp2, format, &second);
+	timestamp2tm(timestamp1, format, &first);
+	timestamp2tm(timestamp2, format, &second);
 
 	/* From time structure to calendar time (since
 	 * Epoch (00:00:00 UTC, January 1, 1970)
