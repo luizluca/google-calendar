@@ -173,44 +173,59 @@ static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	OSyncError *error = NULL;
 	char buffer[512];
 
-	if ((plgdata->calendar) && (counter == 0)) {
-		result = gcal_get_authentication(plgdata->calendar, plgdata->username,
-						 plgdata->password);
-		++counter;
-		if (result == -1)
-			goto error;
+	result = gcal_get_authentication(plgdata->calendar, plgdata->username,
+					 plgdata->password);
+	if (result == -1)
+		goto error;
 
-		snprintf(buffer, sizeof(buffer) - 1, "%s/gcal2osync.xslt",
-			 plgdata->xslt_path);
-		if ((result = xslt_initialize(plgdata->xslt_ctx_gcal, buffer)))
-			goto error;
-		osync_trace(TRACE_INTERNAL, "\ndone calendar: %s\n", buffer);
-	}
-
-	if (((plgdata->contacts) && (counter == 1)) ||
-	    ((plgdata->gcont_sink) && (!plgdata->gcal_sink))) {
-		result = gcal_get_authentication(plgdata->contacts, plgdata->username,
-						 plgdata->password);
-		counter++;
-		if (result == -1)
-			goto error;
-
-		snprintf(buffer, sizeof(buffer) - 1, "%s/gcont2osync.xslt",
-			 plgdata->xslt_path);
-		if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer)))
-			goto error;
-		osync_trace(TRACE_INTERNAL, "\ndone contact: %s\n", buffer);
-	}
+	snprintf(buffer, sizeof(buffer) - 1, "%s/gcal2osync.xslt",
+		 plgdata->xslt_path);
+	if ((result = xslt_initialize(plgdata->xslt_ctx_gcal, buffer)))
+		goto error;
+	osync_trace(TRACE_INTERNAL, "\ndone calendar: %s\n", buffer);
 
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
 	return;
 
 error:
-	osync_trace(TRACE_INTERNAL, "Failed to load xslt stylesheet!\n");
+	osync_trace(TRACE_INTERNAL,
+			"Failed to load gcal2osync.xslt stylesheet!\n");
 	osync_error_set(&error, OSYNC_ERROR_GENERIC,
-			"Unable load xslt stylesheet data.");
-	osync_context_report_osyncerror(ctx, &error);
+			"Unable load gcal2osync.xslt stylesheet data.");
+	osync_context_report_osyncerror(ctx, error);
+}
+
+static void gc_connect_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+				OSyncContext *ctx, void *data)
+{
+	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
+	int result;
+	struct gc_plgdata *plgdata = data;
+	OSyncError *error = NULL;
+	char buffer[512];
+
+	result = gcal_get_authentication(plgdata->contacts, plgdata->username,
+					 plgdata->password);
+	if (result == -1)
+		goto error;
+
+	snprintf(buffer, sizeof(buffer) - 1, "%s/gcont2osync.xslt",
+		 plgdata->xslt_path);
+	if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer)))
+		goto error;
+	osync_trace(TRACE_INTERNAL, "\ndone contact: %s\n", buffer);
+
+	osync_context_report_success(ctx);
+	osync_trace(TRACE_EXIT, "%s", __func__);
+	return;
+
+error:
+	osync_trace(TRACE_INTERNAL,
+			"Failed to load gcont2osync.xslt stylesheet!\n");
+	osync_error_set(&error, OSYNC_ERROR_GENERIC,
+			"Unable load gcont2osync.xslt stylesheet data.");
+	osync_context_report_osyncerror(ctx, error);
 }
 
 static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
