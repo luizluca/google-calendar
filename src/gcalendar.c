@@ -241,7 +241,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	OSyncChange *chg = NULL;
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
-	gcal_event event;
+	gcal_event_t event;
 	OSyncError *state_db_error = NULL;
 
 	if (!(osync_objtype_sink_get_state_db(sink)))
@@ -389,7 +389,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	OSyncChange *chg = NULL;
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
-	gcal_contact contact;
+	gcal_contact_t contact;
 	OSyncError *state_db_error = NULL;
 
 	if (!(osync_objtype_sink_get_state_db(sink)))
@@ -467,7 +467,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 					     raw_xml)))
 			goto error;
 
-		raw_xml = plgdata->xslt_ctx_gcont->xml_str;
+		raw_xml = (char*) plgdata->xslt_ctx_gcont->xml_str;
 		odata = osync_data_new(strdup(raw_xml),
 				       strlen(raw_xml),
 				       plgdata->gcont_format, &error);
@@ -532,8 +532,9 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	osync_trace(TRACE_INTERNAL, "hello, from calendar!\n");
 	//OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	struct gc_plgdata *plgdata = data;
-	gcal_event event = NULL;
-	int size, result;
+	gcal_event_t event = NULL;
+	unsigned int size;
+	int result;
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_event = NULL;
 	OSyncData *odata = NULL;
 
@@ -553,7 +554,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		msg = "Failed converting from osync xmlevent to gcalendar\n";
 		goto error;
 	}
-	raw_xml = plgdata->xslt_ctx_gcal->xml_str;
+	raw_xml = (char*) plgdata->xslt_ctx_gcal->xml_str;
 
 	osync_trace(TRACE_EXIT, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
@@ -573,8 +574,8 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		break;
 
 		case OSYNC_CHANGE_TYPE_MODIFIED:
-			result = gcal_update_xmlentry(plgdata->calendar, raw_xml, &updated_event,
-						      NULL);
+			result = gcal_update_xmlentry(plgdata->calendar,
+				raw_xml, &updated_event, NULL, NULL);
 			if (result == -1) {
 				msg = "Failed editing event!\n";
 				goto error;
@@ -644,8 +645,9 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 	osync_trace(TRACE_INTERNAL, "hello, from contacts!\n");
 
 	struct gc_plgdata *plgdata = data;
-	gcal_contact contact = NULL;
-	int size, result;
+	gcal_contact_t contact = NULL;
+	unsigned int size;
+	int result;
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_contact = NULL;
 	OSyncData *odata = NULL;
 
@@ -665,7 +667,7 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 		msg = "Failed converting from osync xmlcontact to gcontact\n";
 		goto error;
 	}
-	raw_xml = plgdata->xslt_ctx_gcont->xml_str;
+	raw_xml = (char*) plgdata->xslt_ctx_gcont->xml_str;
 
 	osync_trace(TRACE_INTERNAL, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
@@ -685,8 +687,8 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 		break;
 
 		case OSYNC_CHANGE_TYPE_MODIFIED:
-			result = gcal_update_xmlentry(plgdata->contacts, raw_xml, &updated_contact,
-						      NULL);
+			result = gcal_update_xmlentry(plgdata->contacts,
+				raw_xml, &updated_contact, NULL, NULL);
 			if (result == -1) {
 				msg = "Failed editing contact!\n";
 				goto error;
