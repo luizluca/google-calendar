@@ -962,12 +962,12 @@ static osync_bool gc_discover(OSyncPluginInfo *info, void *data, OSyncError **er
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, error);
 
-	struct gc_plgdata *plgdata = data;
-
-	if (plgdata->calendar)
-		osync_objtype_sink_set_available(plgdata->gcal_sink, TRUE);
-	if (plgdata->contacts)
-		osync_objtype_sink_set_available(plgdata->gcont_sink, TRUE);
+	OSyncList *sinks = osync_plugin_info_get_objtype_sinks(info);
+	OSyncList *s = sinks;
+	for( ; s; s = s->next ) {
+		OSyncObjTypeSink *sink = (OSyncObjTypeSink*) s->data;
+		osync_objtype_sink_set_available(sink, TRUE);
+	}
 
 	OSyncVersion *version = osync_version_new(error);
 	osync_version_set_plugin(version, "google-data");
