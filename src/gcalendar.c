@@ -103,10 +103,8 @@ struct gc_plgdata
 	struct gcal_event_array all_events;
 	struct gcal_contact_array all_contacts;
 	// calendar sink/format
-	OSyncObjTypeSink *gcal_sink;
 	OSyncObjFormat *gcal_format;
 	// contact sink/format
-	OSyncObjTypeSink *gcont_sink;
 	OSyncObjFormat *gcont_format;
 	// XSLT context resource struct
 	struct xslt_resources *xslt_ctx_gcal;
@@ -142,8 +140,6 @@ static void free_plg(struct gc_plgdata *plgdata)
 		xmlFree(plgdata->username);
 	if (plgdata->password)
 		xmlFree(plgdata->password);
-	if (plgdata->gcal_sink)
-		osync_objtype_sink_unref(plgdata->gcal_sink);
 	if (plgdata->gcal_format)
 		osync_objformat_unref(plgdata->gcal_format);
 	g_free(plgdata);
@@ -152,7 +148,6 @@ static void free_plg(struct gc_plgdata *plgdata)
 static void gc_connect(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncContext *ctx, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
-	static int counter = 0;
 	int result;
 	struct gc_plgdata *plgdata = data;
 	OSyncError *error = NULL;
@@ -213,8 +208,6 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 	gcal_event event;
 	OSyncError *anchor_error = NULL;
 
-	if (!(plgdata->gcal_sink = osync_plugin_info_get_sink(info)))
-		goto error;
 	if (!(osync_objtype_sink_get_anchor(plgdata->gcal_sink)))
 		goto error;
 
@@ -298,7 +291,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 
 		if (!(chg = osync_change_new(&error)))
 			goto cleanup;
-		osync_data_set_objtype(odata, osync_objtype_sink_get_name(plgdata->gcal_sink));
+		osync_data_set_objtype(odata, osync_objtype_sink_get_name(sink));
 		osync_change_set_data(chg, odata);
 		osync_data_unref(odata);
 
@@ -363,13 +356,11 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 	gcal_contact contact;
 	OSyncError *anchor_error = NULL;
 
-	if (!(plgdata->gcont_sink = osync_plugin_info_get_sink(info)))
+
+	if (!(osync_objtype_sink_get_anchor(sink)))
 		goto error;
 
-	if (!(osync_objtype_sink_get_anchor(plgdata->gcont_sink)))
-		goto error;
-
-	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcont_sink),
+	timestamp = osync_sink_state_get(osync_objtype_sink_get_anchor(sink),
 					  &anchor_error);
 	if (!timestamp) {
 		msg = "gcontact: Anchor returned is NULL!";
@@ -381,7 +372,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 	else
 		osync_trace(TRACE_INTERNAL, "first sync!\n");
 
-	if (osync_objtype_sink_get_slowsync(plgdata->gcont_sink)) {
+	if (osync_objtype_sink_get_slowsync(sink)) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for slow syncing...\n");
 		slow_sync_flag = 1;
 		result = gcal_get_contacts(plgdata->contacts, &(plgdata->all_contacts));
@@ -450,7 +441,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 
 		if (!(chg = osync_change_new(&error)))
 			goto cleanup;
-		osync_data_set_objtype(odata, osync_objtype_sink_get_name(plgdata->gcont_sink));
+		osync_data_set_objtype(odata, osync_objtype_sink_get_name(sink));
 		osync_change_set_data(chg, odata);
 		osync_data_unref(odata);
 
@@ -613,7 +604,6 @@ static void gc_commit_change_contact(void *data, OSyncPluginInfo *info,
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx, change);
 	osync_trace(TRACE_INTERNAL, "hello, from contacts!\n");
 
-	OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	struct gc_plgdata *plgdata = data;
 	gcal_contact contact = NULL;
 	int size, result;
@@ -722,7 +712,6 @@ static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncCon
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	struct gc_plgdata *plgdata = data;
-	//OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	OSyncError *anchor_error;
 
 	if (plgdata->calendar && plgdata->cal_timestamp) {
