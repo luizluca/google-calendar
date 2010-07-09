@@ -777,154 +777,175 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, plugin, info, error);
 	struct gc_plgdata *plgdata;
 	OSyncPluginConfig *config;
-	OSyncPluginAuthentication *auth;
-	OSyncPluginAdvancedOption *advanced;
 	OSyncList *resources;
 	OSyncList *r;
-	const char *objtype, *tmp;
-	int i, numobjs;
+	const char *xslt_config;
 
-	//osync_error_set(error, OSYNC_ERROR_GENERIC, "no msg");
 	plgdata = osync_try_malloc0(sizeof(struct gc_plgdata), error);
 	config = osync_plugin_info_get_config(info);
-	if ((!plgdata) || (!config)) {
+	if( (!plgdata) || (!config) ) {
 		osync_error_set(error, OSYNC_ERROR_GENERIC,
 				"Unable to get config data.");
 		goto error_freeplg;
 	}
 
-	advanced = osync_plugin_config_get_advancedoption_value_by_name(config, "xslt");
-	if (!advanced) {
+	xslt_config = osync_plugin_config_get_advancedoption_value_by_name(config, "xslt");
+	if( !xslt_config ) {
 		osync_trace(TRACE_INTERNAL, "Cannot locate xslt config!\n");
 		goto error_freeplg;
 	}
 
-	if (!(plgdata->xslt_path = strdup(osync_plugin_advancedoption_get_value(advanced))))
+	plgdata->xslt_path = strdup(xslt_config);
+	if( !plgdata->xslt_path )
 		goto error_freeplg;
 
 	resources = osync_plugin_config_get_resources(config);
-	numobjs = osync_plugin_info_num_objtypes(info);
+	for( r = resources; r; r = r->next ) {
+		osync_trace(TRACE_INTERNAL, "field: %s\n",
+			osync_plugin_resource_get_objtype(r->data));
 
-	for (i = 1, r = resources; r; r = r->next, i++) {
-		osync_trace(TRACE_INTERNAL, "field: %s\n", osync_plugin_resource_get_objtype(r->data));
-		if (!(strcmp(osync_plugin_resource_get_objtype(r->data), "event")))
-			if (!(plgdata->calendar = gcal_new(GCALENDAR)))
+		if( !strcmp(osync_plugin_resource_get_objtype(r->data), "event") ) {
+			plgdata->calendar = gcal_new(GCALENDAR);
+			if( !plgdata->calendar )
 				goto error_freeplg;
 			else {
-				osync_trace(TRACE_INTERNAL, "\tcreated calendar obj!\n");
+				osync_trace(TRACE_INTERNAL,
+						"\tcreated calendar obj!\n");
 				gcal_set_store_xml(plgdata->calendar, 1);
 			}
+		}
 
-		if (!(strcmp(osync_plugin_resource_get_objtype(r->data), "contact")))
-			if (!(plgdata->contacts = gcal_new(GCONTACT)))
+		if( !strcmp(osync_plugin_resource_get_objtype(r->data), "contact") ) {
+			plgdata->contacts = gcal_new(GCONTACT);
+			if( !plgdata->contacts )
 				goto error_freeplg;
 			else {
-				osync_trace(TRACE_INTERNAL, "\tcreated contact obj!\n");
+				osync_trace(TRACE_INTERNAL,
+						"\tcreated contact obj!\n");
 				gcal_set_store_xml(plgdata->contacts, 1);
 			}
+		}
 
 	}
 
 
-	// TODO: how works resource policy? For while, copy everything...
-	for (i = 0; i < numobjs; i++) {
+	// Fetch username
+	OSyncPluginAuthentication *optauth = NULL;
+	optauth = osync_plugin_config_get_authentication(config);
+	if( osync_plugin_authentication_option_is_supported(optauth,
+				OSYNC_PLUGIN_AUTHENTICATION_USERNAME) ) {
+		const char *user =
+			osync_plugin_authentication_get_username(optauth);
+		if( !user )
+			goto error_freeplg;
 
-		if (!plgdata->username) {
-			auth = osync_plugin_config_get_authentication(config);
-			tmp = osync_plugin_authentication_get_username(auth);
-			if (!tmp)
-				goto error_freeplg;
-			else
-				if (!(plgdata->username = strdup(tmp)))
-					goto error_freeplg;
-
-		}
-
-		if (!plgdata->password) {
-			tmp = osync_plugin_authentication_get_password(auth);
-			if (!tmp)
-				goto error_freeplg;
-			else
-				if (!(plgdata->password = strdup(tmp)))
-					goto error_freeplg;
-
-		}
-		// TODO: get proxy/calendar title/resources/etc
-
+		plgdata->username = strdup(user);
+		if( !plgdata->username )
+			goto error_freeplg;
+	}
+	else {
+		goto error_freeplg;
 	}
 
-	OSyncObjTypeSinkFunctions functions_gcal;
-	memset(&functions_gcal, 0, sizeof(functions_gcal));
-	functions_gcal.connect = gc_connect;
-	functions_gcal.get_changes = gc_get_changes_calendar;
-	functions_gcal.commit = gc_commit_change_calendar;
-	functions_gcal.disconnect = gc_disconnect;
-	functions_gcal.sync_done = gc_sync_done;
+	// Fetch password
+	if( osync_plugin_authentication_option_is_supported(optauth,
+				OSYNC_PLUGIN_AUTHENTICATION_PASSWORD) ) {
+		const char *pass =
+			osync_plugin_authentication_get_password(optauth);
+		if( !pass )
+			goto error_freeplg;
+
+		plgdata->password = strdup(pass);
+		if( !plgdata->password )
+			goto error_freeplg;
+	}
+	else {
+		goto error_freeplg;
+	}
+
+	// TODO: get proxy/calendar title/resources/etc
 
 
-	if (plgdata->calendar) {
+	// Register calendar sink
+	OSyncObjTypeSink *sink = NULL;
+	sink = osync_plugin_info_find_objtype(info, "event");
+	if( !sink ) {
+		osync_trace(TRACE_ERROR, "%s", "Failed to find objtype event!");
+	}
+	if( sink && osync_objtype_sink_is_enabled(sink) && plgdata->calendar ) {
+
 		osync_trace(TRACE_INTERNAL, "\tcreating calendar sink...\n");
-		OSyncFormatEnv *formatenv1 = osync_plugin_info_get_format_env(info);
-		plgdata->gcal_format = osync_format_env_find_objformat(formatenv1, "xmlformat-event-doc");
+		OSyncFormatEnv *formatenv = osync_plugin_info_get_format_env(info);
+		plgdata->gcal_format = osync_format_env_find_objformat(formatenv, "xmlformat-event-doc");
 		if (!plgdata->gcal_format) {
 			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-event!");
 			goto error_freeplg;
 		}
 		osync_objformat_ref(plgdata->gcal_format);
 
-		plgdata->gcal_sink = osync_plugin_info_find_objtype(info, "event");
-		if (!plgdata->gcal_sink) {
-			osync_trace(TRACE_ERROR, "%s", "Failed to find objtype event!");
-			goto error_freeplg;
-		}
 
-		osync_objtype_sink_set_functions(plgdata->gcal_sink, functions_gcal, plgdata);
-		osync_plugin_info_add_objtype(info, plgdata->gcal_sink);
+		osync_objtype_sink_set_connect_func(sink, gc_connect_calendar);
+		osync_objtype_sink_set_disconnect_func(sink, gc_disconnect);
+		osync_objtype_sink_set_get_changes_func(sink,
+						gc_get_changes_calendar);
+		osync_objtype_sink_set_commit_func(sink,
+						gc_commit_change_calendar);
+		osync_objtype_sink_set_sync_done_func(sink, gc_sync_done);
 
- 		osync_objtype_sink_enable_anchor(plgdata->gcal_sink, TRUE);
+
+		osync_objtype_sink_set_userdata(sink, plgdata);
+ 		osync_objtype_sink_enable_state_db(sink, TRUE);
 	}
 
-	OSyncObjTypeSinkFunctions functions_gcont;
-	memset(&functions_gcont, 0, sizeof(functions_gcont));
-	functions_gcont.connect = gc_connect;
-	functions_gcont.get_changes = gc_get_changes_contact;
-	functions_gcont.commit = gc_commit_change_contact;
-	functions_gcont.disconnect = gc_disconnect;
-	functions_gcont.sync_done = gc_sync_done;
 
-	if (plgdata->contacts) {
+
+
+
+	// Register contact sink
+	sink = NULL;
+	sink = osync_plugin_info_find_objtype(info, "contact");
+	if( !sink ) {
+		osync_trace(TRACE_ERROR, "%s", "Failed to find objtype contact!");
+	}
+	if( sink && osync_objtype_sink_is_enabled(sink) && plgdata->contacts ) {
+
 		osync_trace(TRACE_INTERNAL, "\tcreating contact sink...\n");
-		OSyncFormatEnv *formatenv2 = osync_plugin_info_get_format_env(info);
-		plgdata->gcont_format = osync_format_env_find_objformat(formatenv2, "xmlformat-contact-doc");
+		OSyncFormatEnv *formatenv = osync_plugin_info_get_format_env(info);
+		plgdata->gcont_format = osync_format_env_find_objformat(formatenv, "xmlformat-contact-doc");
 		if (!plgdata->gcont_format) {
 			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-contact!");
 			goto error_freeplg;
 		}
 		osync_objformat_ref(plgdata->gcont_format);
 
-		plgdata->gcont_sink = osync_plugin_info_find_objtype(info, "contact");
-		if (!plgdata->gcont_sink) {
-			osync_trace(TRACE_ERROR, "%s", "Failed to find objtype contact!");
-			goto error_freeplg;
-		}
 
-		osync_objtype_sink_set_functions(plgdata->gcont_sink, functions_gcont, plgdata);
-		osync_objtype_sink_enable_anchor(plgdata->gcont_sink, TRUE);
-		osync_plugin_info_add_objtype(info, plgdata->gcont_sink);
+		osync_objtype_sink_set_connect_func(sink, gc_connect_contact);
+		osync_objtype_sink_set_disconnect_func(sink, gc_disconnect);
+		osync_objtype_sink_set_get_changes_func(sink,
+						gc_get_changes_contact);
+		osync_objtype_sink_set_commit_func(sink,
+						gc_commit_change_contact);
+		osync_objtype_sink_set_sync_done_func(sink, gc_sync_done);
 
+
+		osync_objtype_sink_set_userdata(sink, plgdata);
+ 		osync_objtype_sink_enable_state_db(sink, TRUE);
 	}
 
-	if (plgdata->calendar)
+
+	if( plgdata->calendar ) {
 		if (!(plgdata->xslt_ctx_gcal = xslt_new()))
 			goto error_freeplg;
 		else
 			osync_trace(TRACE_INTERNAL, "\tsucceed creating xslt_gcal!\n");
+	}
 
-	if (plgdata->contacts)
+	if( plgdata->contacts ) {
 		if (!(plgdata->xslt_ctx_gcont = xslt_new()))
 			goto error_freeplg;
 		else
 			osync_trace(TRACE_INTERNAL, "\tsucceed creating xslt_gcont!\n");
+	}
 
 	osync_trace(TRACE_EXIT, "%s", __func__);
 
@@ -933,7 +954,6 @@ static void *gc_initialize(OSyncPlugin *plugin,
 error_freeplg:
 	if (plgdata)
 		free_plg(plgdata);
-out:
 	osync_trace(TRACE_EXIT_ERROR, "%s: %s", __func__, osync_error_print(error));
 	return NULL;
 }
