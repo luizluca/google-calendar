@@ -2,6 +2,7 @@
  *
  * Copyright (c) 2006 Eduardo Pereira Habkost <ehabkost@raisama.net>
  * Copyright (c) 2008 Adenilson Cavalcanti da Silva <adenilson.silva@indt.org.br>
+ * Copyright (c) 2010 Chris Frey <cdfrey@foursquare.net> for NetDirect Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -969,3 +970,4 @@ int get_version(void)
 {
 	return 1;
 }
+
