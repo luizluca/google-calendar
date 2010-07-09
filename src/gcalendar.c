@@ -600,6 +600,9 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *i
 
 	return;
 error:
+	if (updated_event)
+		free(updated_event);
+
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
@@ -708,6 +711,9 @@ static void gc_commit_change_contact(void *data, OSyncPluginInfo *info,
 	return;
 
 error:
+	if (updated_contact)
+		free(updated_contact);
+
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
