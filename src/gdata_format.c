@@ -46,7 +46,7 @@ osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error)
 {
-	/* TODO: how to get path to XSLT file using 'config'? */
+	// TODO: how to get path to XSLT file using 'config'?
 	return FALSE;
 }
 
@@ -55,7 +55,7 @@ osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error)
 {
-	/* TODO: how to get path to XSLT file using 'config'? */
+	// TODO: how to get path to XSLT file using 'config'?
 	return FALSE;
 }
 
@@ -64,7 +64,7 @@ osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error)
 {
-	/* TODO: how to get path to XSLT file using 'config'? */
+	// TODO: how to get path to XSLT file using 'config'?
 	return FALSE;
 }
 
@@ -73,7 +73,7 @@ osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error)
 {
-	/* TODO: how to get path to XSLT file using 'config'? */
+	// TODO: how to get path to XSLT file using 'config'?
 	return FALSE;
 }
 
@@ -88,7 +88,8 @@ osync_bool get_format_info(OSyncFormatEnv *env, OSyncError **error)
 	if (!gevent)
 		return FALSE;
 
-	/* TODO: register (and write) auxiliary functions: compare/create/destroy/blah...*/
+	// TODO: register (and write) auxiliary functions:
+	//       compare/create/destroy/blah...
 
 	osync_format_env_register_objformat(env, gcont);
 	osync_objformat_unref(gcont);
@@ -120,17 +121,17 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	OSyncFormatConverter *conv = NULL;
 	OSyncError *error = NULL;
 
-	/* osync xml formats */
+	// osync xml formats
 	OSyncObjFormat *xml_contact = osync_format_env_find_objformat(env, "xmlformat-contact");
 	OSyncObjFormat *xml_event = osync_format_env_find_objformat(env, "xmlformat-event");
 
-	/* gdata formats */
+	// gdata formats
 	OSyncObjFormat *gevent = osync_format_env_find_objformat(env, "google-event");
 	osync_assert(gevent);
 	OSyncObjFormat *gcontact = osync_format_env_find_objformat(env, "google-contact");
 	osync_assert(gcontact);
 
-	/* from xmlformat to gdata */
+	// from xmlformat to gdata
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, xml_contact, gcontact,
 				   xmlcontact_to_gcontact, &error);
 	osync_assert(conv);
@@ -147,7 +148,7 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	osync_format_env_register_converter(env, conv);
 	osync_converter_unref(conv);
 
-	/* from gdata to xmlformat */
+	// from gdata to xmlformat
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, gcontact, xml_contact,
 				   gcontact_to_xmlcontact, &error);
 	osync_assert(conv);
@@ -172,3 +173,4 @@ int get_version(void)
 {
 	return 1;
 }
+
