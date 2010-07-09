@@ -41,7 +41,28 @@
 #include <opensync/opensync-format.h>
 #include <opensync/opensync-time.h>
 
-osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
+static osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
+				  char **output, unsigned int *outpsize,
+				  osync_bool *free_input, const char *config,
+				  void *userdata, OSyncError **error);
+static osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
+			      char **output, unsigned int *outpsize,
+			      osync_bool *free_input, const char *config,
+			      void *userdata, OSyncError **error);
+static osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
+				  char **output, unsigned int *outpsize,
+				  osync_bool *free_input, const char *config,
+				  void *userdata, OSyncError **error);
+static osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
+			      char **output, unsigned int *outpsize,
+			      osync_bool *free_input, const char *config,
+			      void *userdata, OSyncError **error);
+static void *gc_data_initialize(const char *config, OSyncError **error);
+static osync_bool gc_data_finalize(void *userdata, OSyncError **error);
+
+
+
+static osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
 				  char **output, unsigned int *outpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error)
@@ -50,7 +71,7 @@ osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
+static osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error)
@@ -59,7 +80,7 @@ osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
+static osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
 				  char **output, unsigned int *outpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error)
@@ -68,7 +89,7 @@ osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
+static osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error)
@@ -77,28 +98,7 @@ osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-
-osync_bool get_format_info(OSyncFormatEnv *env, OSyncError **error)
-{
-	OSyncObjFormat *gcont = osync_objformat_new("google-contact", "contact", error);
-	if (!gcont)
-		return FALSE;
-
-	OSyncObjFormat *gevent = osync_objformat_new("google-event", "event", error);
-	if (!gevent)
-		return FALSE;
-
-	// TODO: register (and write) auxiliary functions:
-	//       compare/create/destroy/blah...
-
-	osync_format_env_register_objformat(env, gcont);
-	osync_objformat_unref(gcont);
-
-	osync_format_env_register_objformat(env, gevent);
-	osync_objformat_unref(gevent);
-}
-
-void *gc_data_initialize(OSyncError **error)
+static void *gc_data_initialize(const char *config, OSyncError **error)
 {
 	struct xslt_resources *converter = NULL;
 	converter = xslt_new();
@@ -106,14 +106,46 @@ void *gc_data_initialize(OSyncError **error)
 	return converter;
 }
 
-void gc_data_finalize(void *userdata)
+static osync_bool gc_data_finalize(void *userdata, OSyncError **error)
 {
 	struct xslt_resources *converter = NULL;
 	if (!userdata)
-		return;
+		return TRUE;
 
 	converter = (struct xslt_resources *)userdata;
 	xslt_delete(converter);
+	return TRUE;
+}
+
+
+osync_bool get_format_info(OSyncFormatEnv *env, OSyncError **error)
+{
+	OSyncObjFormat *gcont = osync_objformat_new("google-contact", "contact", error);
+	if (!gcont)
+		goto error;
+
+	OSyncObjFormat *gevent = osync_objformat_new("google-event", "event", error);
+	if (!gevent)
+		goto error;
+
+	// TODO: register (and write) auxiliary functions:
+	//       compare/create/destroy/blah...
+
+	if( !osync_format_env_register_objformat(env, gcont, error) )
+		goto error;
+	osync_objformat_unref(gcont);
+
+	if( !osync_format_env_register_objformat(env, gevent, error) )
+		goto error;
+	osync_objformat_unref(gevent);
+
+	return TRUE;
+error:
+	if( gcont )
+		osync_objformat_unref(gcont);
+	if( gevent )
+		osync_objformat_unref(gevent);
+	return FALSE;
 }
 
 osync_bool get_conversion_info(OSyncFormatEnv *env)
@@ -137,7 +169,8 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	osync_assert(conv);
 	osync_converter_set_initialize_func(conv, gc_data_initialize);
 	osync_converter_set_finalize_func(conv, gc_data_finalize);
-	osync_format_env_register_converter(env, conv);
+	if( !osync_format_env_register_converter(env, conv, &error) )
+		goto error;
 	osync_converter_unref(conv);
 
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, xml_event, gevent,
@@ -145,7 +178,8 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	osync_assert(conv);
 	osync_converter_set_initialize_func(conv, gc_data_initialize);
 	osync_converter_set_finalize_func(conv, gc_data_finalize);
-	osync_format_env_register_converter(env, conv);
+	if( !osync_format_env_register_converter(env, conv, &error) )
+		goto error;
 	osync_converter_unref(conv);
 
 	// from gdata to xmlformat
@@ -154,7 +188,8 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	osync_assert(conv);
 	osync_converter_set_initialize_func(conv, gc_data_initialize);
 	osync_converter_set_finalize_func(conv, gc_data_finalize);
-	osync_format_env_register_converter(env, conv);
+	if( !osync_format_env_register_converter(env, conv, &error) )
+		goto error;
 	osync_converter_unref(conv);
 
 	conv = osync_converter_new(OSYNC_CONVERTER_CONV, gevent, xml_event,
@@ -163,10 +198,19 @@ osync_bool get_conversion_info(OSyncFormatEnv *env)
 	osync_converter_set_initialize_func(conv, gc_data_initialize);
 	osync_converter_set_finalize_func(conv, gc_data_finalize);
 
-	osync_format_env_register_converter(env, conv);
+	if( !osync_format_env_register_converter(env, conv, &error) )
+		goto error;
 	osync_converter_unref(conv);
 
 	return TRUE;
+
+error:
+	osync_trace(TRACE_EXIT_ERROR, "%s: %s", __func__,
+						osync_error_print(&error));
+	osync_error_unref(&error);
+	if( conv )
+		osync_converter_unref(conv);
+	return FALSE;
 }
 
 int get_version(void)
