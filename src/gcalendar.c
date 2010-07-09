@@ -971,26 +971,28 @@ osync_bool get_sync_info(OSyncPluginEnv *env, OSyncError **error)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p)", __func__, env, error);
 	OSyncPlugin *plugin = osync_plugin_new(error);
-	if (!plugin)
+	if( !plugin )
 		goto error;
 
 	osync_plugin_set_name(plugin, "google-data");
 	osync_plugin_set_longname(plugin, "Google calendar/plugin");
-	osync_plugin_set_description(plugin, "Google calendar and contacts plugin");
+	osync_plugin_set_description(plugin,
+		"Google calendar and contacts plugin");
 
 	osync_plugin_set_initialize(plugin, gc_initialize);
 	osync_plugin_set_finalize(plugin, gc_finalize);
 	osync_plugin_set_discover(plugin, gc_discover);
 
-	osync_plugin_env_register_plugin(env, plugin);
+	if( !osync_plugin_env_register_plugin(env, plugin, error) )
+		goto error;
 	osync_plugin_unref(plugin);
 
 	osync_trace(TRACE_EXIT, "%s", __func__);
 	return TRUE;
 
 error:
-	osync_trace(TRACE_EXIT_ERROR, "Unable to register: %s", osync_error_print(error));
-	osync_error_unref(error);
+	osync_trace(TRACE_EXIT_ERROR, "Unable to register: %s",
+				osync_error_print(error));
 	return FALSE;
 }
 
