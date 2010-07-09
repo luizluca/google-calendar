@@ -55,6 +55,25 @@
 #include <time.h>
 #include <sys/time.h>
 
+static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+				OSyncContext *ctx, void *data);
+static void gc_connect_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+				OSyncContext *ctx, void *data);
+static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
+			OSyncPluginInfo *info, OSyncContext *ctx,
+			osync_bool slow_sync, void *data);
+static void gc_get_changes_contact(OSyncObjTypeSink *sink,
+			OSyncPluginInfo *info, OSyncContext *ctx,
+			osync_bool slow_sync, void *data);
+static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
+				OSyncPluginInfo *info, OSyncContext *ctx,
+				OSyncChange *change, void *data);
+static void gc_commit_change_contact(OSyncObjTypeSink *sink,
+				OSyncPluginInfo *info, OSyncContext *ctx,
+				OSyncChange *change, void *data);
+static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+			OSyncContext *ctx, void *data);
+
 static int timestamp_cmp(char *timestamp1, char *timestamp2)
 {
 	// timestamp (RFC3339) formating string
@@ -145,7 +164,8 @@ static void free_plg(struct gc_plgdata *plgdata)
 	g_free(plgdata);
 }
 
-static void gc_connect(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncContext *ctx, void *data)
+static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+				OSyncContext *ctx, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	int result;
@@ -193,8 +213,9 @@ error:
 	osync_context_report_osyncerror(ctx, &error);
 }
 
-static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncContext *ctx,
-				    osync_bool slow_sync, void *data)
+static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
+			OSyncPluginInfo *info, OSyncContext *ctx,
+			osync_bool slow_sync, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	char buffer[512];
@@ -340,8 +361,9 @@ error:
 }
 
 
-static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncContext *ctx,
-				   osync_bool slow_sync, void *data)
+static void gc_get_changes_contact(OSyncObjTypeSink *sink,
+			OSyncPluginInfo *info, OSyncContext *ctx,
+			osync_bool slow_sync, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	char buffer[512];
@@ -488,10 +510,12 @@ error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
 }
 
-static void gc_commit_change_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
-				      OSyncContext *ctx, OSyncChange *change, void *data)
+static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
+				OSyncPluginInfo *info, OSyncContext *ctx,
+				OSyncChange *change, void *data)
 {
-	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx, change);
+	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p, %p, %p)", __func__, sink,
+						info, ctx, change, data);
 	osync_trace(TRACE_INTERNAL, "hello, from calendar!\n");
 	//OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	struct gc_plgdata *plgdata = data;
@@ -598,10 +622,12 @@ error:
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
 
-static void gc_commit_change_contact(void *data, OSyncPluginInfo *info,
-				     OSyncContext *ctx, OSyncChange *change)
+static void gc_commit_change_contact(OSyncObjTypeSink *sink,
+				OSyncPluginInfo *info, OSyncContext *ctx,
+				OSyncChange *change, void *data)
 {
-	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx, change);
+	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p, %p, %p)", __func__, sink,
+					info, ctx, change, data);
 	osync_trace(TRACE_INTERNAL, "hello, from contacts!\n");
 
 	struct gc_plgdata *plgdata = data;
@@ -708,7 +734,8 @@ error:
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
 
-static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncContext *ctx, void *data)
+static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+			OSyncContext *ctx, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	struct gc_plgdata *plgdata = data;
@@ -731,12 +758,17 @@ static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncCon
 	osync_context_report_success(ctx);
 }
 
-static void gc_disconnect(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncContext *ctx, void *data)
+static void gc_disconnect(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
+			OSyncContext *ctx, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
 }
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Plugin API
 
 static void *gc_initialize(OSyncPlugin *plugin,
 			   OSyncPluginInfo *info,
