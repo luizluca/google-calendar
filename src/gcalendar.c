@@ -743,15 +743,6 @@ static void gc_disconnect(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncCo
 	osync_trace(TRACE_EXIT, "%s", __func__);
 }
 
-static void gc_finalize(void *data)
-{
-	osync_trace(TRACE_ENTRY, "%s(%p)", __func__, data);
-	struct gc_plgdata *plgdata = data;
-
-	free_plg(plgdata);
-	osync_trace(TRACE_EXIT, "%s", __func__);
-}
-
 static void *gc_initialize(OSyncPlugin *plugin,
 			   OSyncPluginInfo *info,
 			   OSyncError **error)
@@ -938,6 +929,15 @@ static osync_bool gc_discover(OSyncPluginInfo *info, void *data, OSyncError **er
 
 	osync_trace(TRACE_EXIT, "%s", __func__);
 	return TRUE;
+}
+
+static void gc_finalize(void *data)
+{
+	osync_trace(TRACE_ENTRY, "%s(%p)", __func__, data);
+	struct gc_plgdata *plgdata = data;
+
+	free_plg(plgdata);
+	osync_trace(TRACE_EXIT, "%s", __func__);
 }
 
 osync_bool get_sync_info(OSyncPluginEnv *env, OSyncError **error)
