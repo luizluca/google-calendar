@@ -153,7 +153,6 @@ static void gc_connect(OSyncObjTypeSink *sink, OSyncPluginInfo *info, OSyncConte
 	static int counter = 0;
 	int result;
 	struct gc_plgdata *plgdata = data;
-	//OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	OSyncError *error = NULL;
 	char buffer[512];
 
@@ -202,7 +201,6 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	char buffer[512];
-	static int counter = 0;
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
@@ -247,7 +245,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 		goto error;
 	}
 
-	osync_trace(TRACE_INTERNAL, "gcalendar: got then all!\n");
+	osync_trace(TRACE_INTERNAL, "gcalendar: got them all!\n");
 	if (plgdata->all_events.length == 0) {
 		osync_trace(TRACE_INTERNAL, "gcalendar: no changes...\n");
 		goto no_changes;
@@ -289,7 +287,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *inf
 					     raw_xml)))
 			goto error;
 
-		raw_xml = plgdata->xslt_ctx_gcal->xml_str;
+		raw_xml = (char*) plgdata->xslt_ctx_gcal->xml_str;
 		odata = osync_data_new(strdup(raw_xml),
 				       strlen(raw_xml),
 				       plgdata->gcal_format, &error);
@@ -330,7 +328,7 @@ no_changes:
 
 	osync_trace(TRACE_INTERNAL, "\ndone calendar: %s\n", buffer);
 
-exit:
+//exit:
 	/* osync_anchor_retrieve uses osync_strdup */
 	osync_free(timestamp);
 	osync_context_report_success(ctx);
@@ -399,7 +397,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info
 		goto error;
 	}
 
-	osync_trace(TRACE_INTERNAL, "gcontact: got then all!\n");
+	osync_trace(TRACE_INTERNAL, "gcontact: got them all!\n");
 	if (plgdata->all_contacts.length == 0) {
 		osync_trace(TRACE_INTERNAL, "gcontact: no changes...\n");
 		goto no_changes;
@@ -482,7 +480,7 @@ no_changes:
 
 	osync_trace(TRACE_INTERNAL, "\ndone contact: %s\n", buffer);
 
-exit:
+//exit:
 	/* osync_anchor_retrieve uses osync_strdup */
 	osync_free(timestamp);
 	osync_context_report_success(ctx);
