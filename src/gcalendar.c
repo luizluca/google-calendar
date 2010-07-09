@@ -242,13 +242,13 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
 	gcal_event event;
-	OSyncError *anchor_error = NULL;
+	OSyncError *state_db_error = NULL;
 
-	if (!(osync_objtype_sink_get_anchor(plgdata->gcal_sink)))
+	if (!(osync_objtype_sink_get_state_db(sink)))
 		goto error;
 
-	timestamp = osync_anchor_retrieve(osync_objtype_sink_get_anchor(plgdata->gcal_sink),
-					  &anchor_error);
+	timestamp = osync_sink_state_get(osync_objtype_sink_get_state_db(sink),
+					  "cal_timestamp", &state_db_error);
 	if (!timestamp) {
 		msg = "gcalendar: Anchor returned is NULL!";
 		goto error;
@@ -382,7 +382,6 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	char buffer[512];
-	static int counter = 0;
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
@@ -391,14 +390,13 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	int result = 0, i;
 	char *timestamp = NULL, *msg, *raw_xml = NULL;
 	gcal_contact contact;
-	OSyncError *anchor_error = NULL;
+	OSyncError *state_db_error = NULL;
 
-
-	if (!(osync_objtype_sink_get_anchor(sink)))
+	if (!(osync_objtype_sink_get_state_db(sink)))
 		goto error;
 
-	timestamp = osync_sink_state_get(osync_objtype_sink_get_anchor(sink),
-					  &anchor_error);
+	timestamp = osync_sink_state_get(osync_objtype_sink_get_state_db(sink),
+					  "cont_timestamp", &state_db_error);
 	if (!timestamp) {
 		msg = "gcontact: Anchor returned is NULL!";
 		goto error;
@@ -754,20 +752,22 @@ static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	struct gc_plgdata *plgdata = data;
-	OSyncError *anchor_error;
+	OSyncError *state_db_error;
 
 	if (plgdata->calendar && plgdata->cal_timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cal_timestamp);
-		osync_anchor_update(osync_objtype_sink_get_anchor(plgdata->gcal_sink),
-				    plgdata->cal_timestamp, &anchor_error);
+		osync_sink_state_set(osync_objtype_sink_get_state_db(sink),
+				    "cal_timestamp", plgdata->cal_timestamp,
+				    &state_db_error);
 	}
 
 	if (plgdata->contacts && plgdata->cont_timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
 				    plgdata->cont_timestamp);
-		osync_anchor_update(osync_objtype_sink_get_anchor(plgdata->gcont_sink),
-				    plgdata->cont_timestamp, &anchor_error);
+		osync_sink_state_set(osync_objtype_sink_get_state_db(sink),
+				    "cont_timestamp", plgdata->cont_timestamp,
+				    &state_db_error);
 	}
 
 	osync_context_report_success(ctx);
