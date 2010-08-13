@@ -22,8 +22,7 @@
  */
 
 /* TODO:
- * - find a way to report changes to opensync and make it work
- * - review code for leaks (I'm not sure if I'm using opensync API correctly...)
+ * - review code for leaks
  *
  */
 
@@ -324,7 +323,6 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
 	struct gc_plgdata *plgdata = data;
-	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
@@ -332,29 +330,26 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	char *timestamp = NULL, *msg = NULL, *raw_xml = NULL;
 	gcal_event_t event;
 	OSyncError *state_db_error = NULL;
+	OSyncSinkStateDB *state_db = NULL;
 
-	if (!(osync_objtype_sink_get_state_db(sink)))
+	state_db = osync_objtype_sink_get_state_db(sink);
+	if( !state_db )
 		goto error;
 
-	timestamp = osync_sink_state_get(osync_objtype_sink_get_state_db(sink),
-					  "cal_timestamp", &state_db_error);
+	timestamp = osync_sink_state_get(state_db, "cal_timestamp",
+						&state_db_error);
 	if (!timestamp) {
 		msg = "gcalendar: Anchor returned is NULL!";
 		goto error;
 	}
 
-	if (strlen(timestamp) > 0)
-		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
-	else
-		osync_trace(TRACE_INTERNAL, "first sync!\n");
+	osync_trace(TRACE_INTERNAL, "timestamp is: '%s'\n", timestamp);
 
-	if (slow_sync) {
-		osync_trace(TRACE_INTERNAL, "\n\t\tgcal: Client asked for slow syncing...\n");
-		slow_sync_flag = 1;
+	if (slow_sync || strlen(timestamp) == 0) {
+		osync_trace(TRACE_INTERNAL, "\n\t\tgcal: slow sync, or first time\n");
 		result = gcal_get_events(plgdata->calendar, &(plgdata->all_events));
 
 	} else {
-		osync_trace(TRACE_INTERNAL, "\n\t\tgcal: Client asked for fast syncing...\n");
 		result = gcal_get_updated_events(plgdata->calendar,
 						 &(plgdata->all_events),
 						 timestamp);
@@ -374,9 +369,9 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			    plgdata->all_events.length);
 	}
 
-
 	// Calendar returns most recently updated event as first element
 	for (i = 0; i < plgdata->all_events.length; ++i) {
+		// grab the next event object
 		event = gcal_event_element(&(plgdata->all_events), i);
 		if (!event) {
 			osync_trace(TRACE_INTERNAL, "Cannot access updated event %d", i);
@@ -394,53 +389,93 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			}
 		}
 
+		// are we done yet?  libgcal includes the entry with the
+		// given timestamp, so if the timestamp of this event
+		// is <= to the timestamp we asked for, then we're done
+		if( !slow_sync && timestamp_cmp(gcal_event_get_updated(event), timestamp) <= 0 )
+			break;
+
 		osync_trace(TRACE_INTERNAL, "gevent: timestamp:%s\tevent:%s\n",
 			    timestamp, gcal_event_get_updated(event));
-		// Workaround for inclusive returned results
-		if ((timestamp_cmp(timestamp, gcal_event_get_updated(event)) == 0)
-		    && !slow_sync_flag
-		    && !gcal_event_is_deleted(event)) {
-			osync_trace(TRACE_INTERNAL, "gevent: old event.");
-			continue;
-		} else
-			osync_trace(TRACE_INTERNAL, "gevent: new or deleted event!");
 
-		raw_xml = gcal_event_get_xml(event);
-		if ((result = xslt_transform(plgdata->xslt_ctx_gcal,
-					     raw_xml)))
-			goto error;
+		// grab ID for current change... this is a Google URL
+		const char *id = gcal_event_get_id(event);
 
-		raw_xml = (char*) plgdata->xslt_ctx_gcal->xml_str;
-		odata = osync_data_new(strdup(raw_xml),
-				       strlen(raw_xml),
-				       plgdata->gcal_format, &error);
-		if (!odata)
-			goto cleanup;
-
-		if (!(chg = osync_change_new(&error)))
-			goto cleanup;
-		osync_data_set_objtype(odata, osync_objtype_sink_get_name(sink));
-		osync_change_set_data(chg, odata);
-		osync_data_unref(odata);
-
-		osync_change_set_uid(chg, gcal_event_get_id(event));
-
-//FIXME - add hashtable support here, and let it determine the changetype,
-//similar to barry-sync.
-
-		if (slow_sync_flag)
-			osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_ADDED);
-		else
-			if (gcal_event_is_deleted(event)) {
-				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_DELETED);
-				osync_trace(TRACE_INTERNAL, "deleted entry!");
+		// determine changetype - we do not use osync_hashtable here
+		// because I believe that requires us to download all
+		// events in order to feed the timestamp to the hashtable
+		// function... hashtable is more suited to a local access,
+		// instead of internet access.
+		OSyncChangeType ct = OSYNC_CHANGE_TYPE_UNKNOWN;
+		if( gcal_event_is_deleted(event) ) {
+			ct = OSYNC_CHANGE_TYPE_DELETED;
+			if( !osync_sink_state_set(state_db, id, "0", &state_db_error) ) {
+				msg = "Error setting state_db for id";
+				goto error;
 			}
-			else
-				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_MODIFIED);
+			if( slow_sync ) {
+				// in slow sync mode, we don't care about
+				// deleted objects
+				continue;
+			}
+		}
+		else {
+			// not deleted, so either ADDED or MODIFIED...
+			// check state_db for id to see if we've seen this
+			// one before
+			const char *seen = osync_sink_state_get(state_db,
+							id, &state_db_error);
+			if( !seen ) {
+				msg = "sink_state_get returned NULL";
+				goto error;
+			}
+
+			if( !slow_sync && seen[0] == '1' ) {
+				// we've seen this object before
+				ct = OSYNC_CHANGE_TYPE_MODIFIED;
+			}
+			else {
+				ct = OSYNC_CHANGE_TYPE_ADDED;
+			}
+		}
+
+		// create change object
+		chg = osync_change_new(&error);
+		if( !chg )
+			goto cleanup;
+
+		// setup the change
+		osync_change_set_uid(chg, id);
+		osync_change_set_hash(chg, gcal_event_get_updated(event));
+		osync_change_set_changetype(chg, ct);
+
+		// fill in the data
+		if( ct != OSYNC_CHANGE_TYPE_DELETED ) {
+			raw_xml = gcal_event_get_xml(event);
+			if( xslt_transform(plgdata->xslt_ctx_gcal, raw_xml) ) {
+				osync_change_unref(chg);
+				goto error;
+			}
+
+			raw_xml = (char*) plgdata->xslt_ctx_gcal->xml_str;
+			odata = osync_data_new(strdup(raw_xml),
+					       strlen(raw_xml),
+					       plgdata->gcal_format, &error);
+			if( !odata ) {
+				osync_change_unref(chg);
+				goto cleanup;
+			}
+
+			osync_data_set_objtype(odata,
+					osync_objtype_sink_get_name(sink));
+			osync_change_set_data(chg, odata);
+			osync_data_unref(odata);
+		}
 
 		osync_context_report_change(ctx, chg);
 		osync_change_unref(chg);
 	}
+
 
 exit:
 	// osync_sink_state_get uses osync_strdup
@@ -613,75 +648,108 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p, %p, %p)", __func__, sink,
 						info, ctx, change, data);
 	osync_trace(TRACE_INTERNAL, "hello, from calendar!\n");
-	//OSyncObjTypeSink *sink = osync_plugin_info_get_sink(info);
 	struct gc_plgdata *plgdata = data;
 	gcal_event_t event = NULL;
 	unsigned int size;
 	int result;
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_event = NULL;
 	OSyncData *odata = NULL;
+	OSyncError *state_db_error = NULL;
+	OSyncSinkStateDB *state_db = NULL;
 
-	if (!(odata = osync_change_get_data(change))) {
+	state_db = osync_objtype_sink_get_state_db(sink);
+	if( !state_db )
+		msg = "Cannot start state_db!";
+		goto error;
+
+	odata = osync_change_get_data(change);
+	if( !odata ) {
 		msg = "Cannot get raw data from change obj!\n";
 		goto error;
 	}
 
 	osync_data_get_data(odata, &osync_xml, &size);
-	if (!osync_xml) {
+	if( !osync_xml ) {
 		msg = "Failed getting xml from xmlobj!\n";
 		goto error;
 	}
 
 	// Convert to gdata format
-	if ((result = xslt_transform(plgdata->xslt_ctx_gcal, osync_xml))) {
+	result = xslt_transform(plgdata->xslt_ctx_gcal, osync_xml);
+	if( result ) {
 		msg = "Failed converting from osync xmlevent to gcalendar\n";
 		goto error;
 	}
+
 	raw_xml = vtime2gtime( (char*) plgdata->xslt_ctx_gcal->xml_str );
 
 	osync_trace(TRACE_EXIT, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
-	switch (osync_change_get_changetype(change)) {
-		case OSYNC_CHANGE_TYPE_ADDED:
-			result = gcal_add_xmlentry(plgdata->calendar, raw_xml, &updated_event);
-			if (result == -1) {
-				msg = "Failed adding new event!\n";
-				result = gcal_status_httpcode(plgdata->calendar);
-				goto error;
-			}
-
-			if (!(event = gcal_event_new(updated_event))) {
-				msg = "Failed recovering updated fields!\n";
-				goto error;
-			}
-		break;
-
-		case OSYNC_CHANGE_TYPE_MODIFIED:
-			result = gcal_update_xmlentry(plgdata->calendar,
-				raw_xml, &updated_event, NULL, NULL);
-			if (result == -1) {
-				msg = "Failed editing event!\n";
-				goto error;
-			}
-
-			if (!(event = gcal_event_new(updated_event))) {
-				msg = "Failed recovering updated fields!\n";
-				goto error;
-			}
-		break;
-
-		case OSYNC_CHANGE_TYPE_DELETED:
-			result = gcal_erase_xmlentry(plgdata->calendar, raw_xml);
-			if (result == -1) {
-				msg = "Failed deleting event!\n";
-				goto error;
-			}
-		break;
-
-		default:
-			osync_context_report_error(ctx, OSYNC_ERROR_NOT_SUPPORTED,
-						   "Unknown change type");
+	switch( osync_change_get_changetype(change) )
+	{
+	case OSYNC_CHANGE_TYPE_ADDED:
+		result = gcal_add_xmlentry(plgdata->calendar, raw_xml,
+							&updated_event);
+		if( result == -1 ) {
+			msg = "Failed adding new event!\n";
+			result = gcal_status_httpcode(plgdata->calendar);
 			goto error;
+		}
+
+		event = gcal_event_new(updated_event);
+		if( !event ) {
+			msg = "Failed recovering updated fields!\n";
+			goto error;
+		}
+
+		// mark this as "seen"
+		if( !osync_sink_state_set(state_db, gcal_event_get_id(event), "1", &state_db_error) ) {
+			msg = "Error setting added state";
+			goto error;
+		}
+		break;
+
+	case OSYNC_CHANGE_TYPE_MODIFIED:
+		result = gcal_update_xmlentry(plgdata->calendar, raw_xml,
+						&updated_event, NULL, NULL);
+		if( result == -1 ) {
+			msg = "Failed editing event!\n";
+			goto error;
+		}
+
+		event = gcal_event_new(updated_event);
+		if( !event ) {
+			msg = "Failed recovering updated fields!\n";
+			goto error;
+		}
+
+		// mark this as "seen"
+		if( !osync_sink_state_set(state_db, gcal_event_get_id(event), "1", &state_db_error) ) {
+			msg = "Error setting modified state";
+			goto error;
+		}
+		break;
+
+	case OSYNC_CHANGE_TYPE_DELETED:
+		result = gcal_erase_xmlentry(plgdata->calendar, raw_xml);
+		if( result == -1 ) {
+			msg = "Failed deleting event!\n";
+			goto error;
+		}
+
+		// mark this as "unseen"
+		if( !osync_sink_state_set(state_db,
+			osync_change_get_uid(change), "0", &state_db_error) )
+		{
+			msg = "Error setting modified state";
+			goto error;
+		}
+		break;
+
+	default:
+		osync_context_report_error(ctx, OSYNC_ERROR_NOT_SUPPORTED,
+					   "Unknown change type");
+		goto error;
 		break;
 	}
 
@@ -690,17 +758,25 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 
 	if (event) {
 		// update the timestamp
-		if (plgdata->cal_timestamp)
-			free(plgdata->cal_timestamp);
-		plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
+		if( plgdata->cal_timestamp ) {
+			// only if newer
+			if( timestamp_cmp(gcal_event_get_updated(event), plgdata->cal_timestamp) > 0 ) {
+				free(plgdata->cal_timestamp);
+				plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
+			}
+		}
+		else {
+			plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
+		}
+
+		// error check
 		if (!plgdata->cal_timestamp) {
 			msg = "Failed copying contact timestamp!\n";
 			goto error;
 		}
 
-		// FIXME: not sure if this works
 		// Inform the new ID
-		osync_change_set_uid(change, gcal_event_get_url(event));
+		osync_change_set_uid(change, gcal_event_get_id(event));
 		gcal_event_delete(event);
 
 	}
