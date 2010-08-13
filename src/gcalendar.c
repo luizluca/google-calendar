@@ -796,7 +796,6 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	OSyncPluginConfig *config;
 	OSyncList *resources;
 	OSyncList *r;
-	const char *xslt_config;
 
 	plgdata = osync_try_malloc0(sizeof(struct gc_plgdata), error);
 	config = osync_plugin_info_get_config(info);
@@ -806,13 +805,7 @@ static void *gc_initialize(OSyncPlugin *plugin,
 		goto error_freeplg;
 	}
 
-	xslt_config = osync_plugin_config_get_advancedoption_value_by_name(config, "xslt");
-	if( !xslt_config ) {
-		osync_trace(TRACE_INTERNAL, "Cannot locate xslt config!\n");
-		goto error_freeplg;
-	}
-
-	plgdata->xslt_path = strdup(xslt_config);
+	plgdata->xslt_path = strdup(osync_plugin_get_default_configdir());
 	if( !plgdata->xslt_path )
 		goto error_freeplg;
 

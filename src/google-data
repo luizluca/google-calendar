@@ -2,14 +2,6 @@
 <config version="1.0">
   <AdvancedOptions>
     <AdvancedOption>
-      <!-- Location of XSLT files used to make conversion -->
-      <DisplayName>Path to XSLT files</DisplayName>
-      <Name>xslt</Name>
-      <Type>string</Type>
-      <Value>/usr/local/share/libopensync1/defaults</Value>
-    </AdvancedOption>
-
-    <AdvancedOption>
       <!-- to be implemented in libgcal: use other calendar than default -->
       <DisplayName>Calendar title</DisplayName>
       <Name>title</Name>
