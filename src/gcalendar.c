@@ -233,14 +233,13 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			osync_bool slow_sync, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
-	char buffer[512];
 	struct gc_plgdata *plgdata = data;
 	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
 	int result = 0, i;
-	char *timestamp = NULL, *msg, *raw_xml = NULL;
+	char *timestamp = NULL, *msg = NULL, *raw_xml = NULL;
 	gcal_event_t event;
 	OSyncError *state_db_error = NULL;
 
@@ -279,28 +278,31 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	osync_trace(TRACE_INTERNAL, "gcalendar: got them all!\n");
 	if (plgdata->all_events.length == 0) {
 		osync_trace(TRACE_INTERNAL, "gcalendar: no changes...\n");
-		goto no_changes;
-	} else
+		goto exit;
+	} else {
 		osync_trace(TRACE_INTERNAL, "gcalendar: changes count: %d\n",
 			    plgdata->all_events.length);
+	}
 
 
 	// Calendar returns most recently updated event as first element
-	event = gcal_event_element(&(plgdata->all_events), 0);
-	if (!event) {
-		msg = "Cannot access last updated event!\n";
-		goto error;
-	}
-	plgdata->cont_timestamp = strdup(gcal_event_get_updated(event));
-	if (!plgdata->cont_timestamp) {
-		msg = "Failed copying event timestamp!\n";
-		goto error;
-	}
-
 	for (i = 0; i < plgdata->all_events.length; ++i) {
 		event = gcal_event_element(&(plgdata->all_events), i);
-		if (!event)
+		if (!event) {
+			osync_trace(TRACE_INTERNAL, "Cannot access updated event %d", i);
 			goto error;
+		}
+
+		// save first timestamp as new "done" mark
+		if (i == 0) {
+			if (plgdata->cal_timestamp)
+				free(plgdata->cal_timestamp);
+			plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
+			if (!plgdata->cal_timestamp) {
+				msg = "Failed copying event timestamp!\n";
+				goto error;
+			}
+		}
 
 		osync_trace(TRACE_INTERNAL, "gevent: timestamp:%s\tevent:%s\n",
 			    timestamp, gcal_event_get_updated(event));
@@ -333,6 +335,9 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 
 		osync_change_set_uid(chg, gcal_event_get_url(event));
 
+//FIXME - add hashtable support here, and let it determine the changetype,
+//similar to barry-sync.
+
 		if (slow_sync_flag)
 			osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_ADDED);
 		else
@@ -347,19 +352,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		osync_change_unref(chg);
 	}
 
-no_changes:
-
-	// Load XSLT style to convert osync xmlformat-event --> gdata
-	snprintf(buffer, sizeof(buffer) - 1, "%s/osync2gcal.xslt",
-		 plgdata->xslt_path);
-	if ((result = xslt_initialize(plgdata->xslt_ctx_gcal, buffer))) {
-		msg = "Cannot initialize new XSLT!\n";
-		goto error;
-	}
-
-	osync_trace(TRACE_INTERNAL, "\ndone calendar: %s\n", buffer);
-
-//exit:
+exit:
 	// osync_sink_state_get uses osync_strdup
 	osync_free(timestamp);
 	osync_context_report_success(ctx);
