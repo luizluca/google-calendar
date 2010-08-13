@@ -1,3 +1,5 @@
-Same compiling instructions as opensync trunk (0.4x), has a requirement
-libgcal:
+Same compiling instructions as opensync trunk (0.4x).
+
+Also has a requirement libgcal, developed using version 0.9.5:
 http://libgcal.googlecode.com
+
