@@ -43,6 +43,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -106,6 +107,95 @@ static int timestamp_cmp(char *timestamp1, char *timestamp2)
 	return result;
 
 }
+
+const char* findstr(const char *data, const char *format)
+{
+	const char *match = format;
+	const char *start = data;
+
+	while( *data && *match ) {
+		int matched = 0;
+
+		switch( *match )
+		{
+		case '9':
+			matched = isdigit(*data);
+			break;
+		default:
+			matched = (*data == *match);
+			break;
+		}
+
+		if( matched ) {
+			data++;
+			match++;
+			if( *match == 0 )
+				return start;
+		}
+		else {
+			data++;
+			start = data;
+			match = format;
+		}
+	}
+
+	return data;
+}
+
+// vtime2gtime
+//
+// Searches through data, converting every vtime string it finds into
+// a timestamp compatible with Google.  i.e. it converts time in the
+// format: YYYYMMDDTHHMMSSZ to YYYY-MM-DDTHH:MM:SSZ
+//
+// Caller is responsible for freeing the returned string.
+//
+char* vtime2gtime(const char *data)
+{
+	char *ret = malloc(strlen(data) * 2);
+	char *target = ret;
+
+	while( *data ) {
+		// search for YYYYMMDDTHHMMSS
+		const char *match = findstr(data, "99999999T999999");
+
+		// copy the non-matching data
+		memcpy(target, data, match - data);
+		target += match - data;
+
+		// was there a match?
+		if( *match ) {
+			// adjust the timestamp
+			target[0] = match[0];
+			target[1] = match[1];
+			target[2] = match[2];
+			target[3] = match[3];
+			target[4] = '-';
+			target[5] = match[4];
+			target[6] = match[5];
+			target[7] = '-';
+			target[8] = match[6];
+			target[9] = match[7];
+			target[10] = match[8];
+			target[11] = match[9];
+			target[12] = match[10];
+			target[13] = ':';
+			target[14] = match[11];
+			target[15] = match[12];
+			target[16] = ':';
+			target[17] = match[13];
+			target[18] = match[14];
+			target += 19;
+			data = match + 15;
+		}
+		else {
+			data = match;
+		}
+	}
+	*target = 0;
+	return ret;
+}
+
 
 struct gc_plgdata
 {
@@ -547,7 +637,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		msg = "Failed converting from osync xmlevent to gcalendar\n";
 		goto error;
 	}
-	raw_xml = (char*) plgdata->xslt_ctx_gcal->xml_str;
+	raw_xml = vtime2gtime( (char*) plgdata->xslt_ctx_gcal->xml_str );
 
 	osync_trace(TRACE_EXIT, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
@@ -624,6 +714,8 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 error:
 	if (updated_event)
 		free(updated_event);
+	if (raw_xml)
+		free(raw_xml);
 
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
@@ -660,7 +752,7 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 		msg = "Failed converting from osync xmlcontact to gcontact\n";
 		goto error;
 	}
-	raw_xml = (char*) plgdata->xslt_ctx_gcont->xml_str;
+	raw_xml = vtime2gtime( (char*) plgdata->xslt_ctx_gcont->xml_str );
 
 	osync_trace(TRACE_INTERNAL, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
@@ -737,6 +829,8 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 error:
 	if (updated_contact)
 		free(updated_contact);
+	if (raw_xml)
+		free(raw_xml);
 
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
