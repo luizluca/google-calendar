@@ -38,7 +38,7 @@
       <Formats>
 	<Format>
           <!-- <Name>google-contact</Name> -->
-	  <Name>xmlformat-contact</Name>
+	  <Name>xmlformat-contact-doc</Name>
 	</Format>
       </Formats>
       <Name>My private google contacts</Name>
@@ -51,7 +51,7 @@
       <Formats>
 	<Format>
           <!-- <Name>google-event</Name> -->
-	  <Name>xmlformat-event</Name>
+	  <Name>xmlformat-event-doc</Name>
 	</Format>
       </Formats>
       <Name>My private google calendar</Name>
