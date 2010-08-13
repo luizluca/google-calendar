@@ -423,7 +423,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		osync_change_set_data(chg, odata);
 		osync_data_unref(odata);
 
-		osync_change_set_uid(chg, gcal_event_get_url(event));
+		osync_change_set_uid(chg, gcal_event_get_id(event));
 
 //FIXME - add hashtable support here, and let it determine the changetype,
 //similar to barry-sync.
@@ -563,7 +563,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 		osync_change_set_data(chg, odata);
 		osync_data_unref(odata);
 
-		osync_change_set_uid(chg, gcal_contact_get_url(contact));
+		osync_change_set_uid(chg, gcal_contact_get_id(contact));
 
 		if (slow_sync_flag)
 			osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_ADDED);
