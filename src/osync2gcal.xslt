@@ -28,12 +28,12 @@
 
 	<title>
 	  <xsl:attribute name="type">text</xsl:attribute>
-	    <xsl:value-of select="descendant::Description/Content"/>
+	    <xsl:value-of select="descendant::Summary/Content"/>
 	</title>
 
 	<content>
 	  <xsl:attribute name="type">text</xsl:attribute>
-	    <xsl:value-of select="descendant::Comment/Content"/>
+	    <xsl:value-of select="descendant::Description/Content"/>
 	</content>
 
 	<link>

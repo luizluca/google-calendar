@@ -79,9 +79,15 @@
 	  </Content>
 	</DateStarted>
 
+        <Summary>
+          <Content>
+           <xsl:value-of select="descendant::atom:title"/>
+          </Content>
+        </Summary>
+
         <Description>
 	  <Content>
-           <xsl:value-of select="descendant::atom:title"/>
+           <xsl:value-of select="descendant::atom:content"/>
 	  </Content>
         </Description>
 
