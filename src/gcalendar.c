@@ -178,7 +178,7 @@ static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	if (result == -1)
 		goto error;
 
-	snprintf(buffer, sizeof(buffer) - 1, "%s/gcal2osync.xslt",
+	snprintf(buffer, sizeof(buffer) - 1, "%sgcal2osync.xslt",
 		 plgdata->xslt_path);
 	if ((result = xslt_initialize(plgdata->xslt_ctx_gcal, buffer)))
 		goto error;
@@ -210,7 +210,7 @@ static void gc_connect_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	if (result == -1)
 		goto error;
 
-	snprintf(buffer, sizeof(buffer) - 1, "%s/gcont2osync.xslt",
+	snprintf(buffer, sizeof(buffer) - 1, "%sgcont2osync.xslt",
 		 plgdata->xslt_path);
 	if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer)))
 		goto error;
@@ -499,7 +499,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 no_changes:
 
 	// Load XSLT style to convert osync xmlformat-contact --> gdata
-	snprintf(buffer, sizeof(buffer) - 1, "%s/osync2gcont.xslt",
+	snprintf(buffer, sizeof(buffer) - 1, "%sosync2gcont.xslt",
 		 plgdata->xslt_path);
 	if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer))) {
 		msg = "Cannot initialize new XSLT!\n";
