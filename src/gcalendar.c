@@ -655,16 +655,17 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	struct gc_plgdata *plgdata = data;
 	gcal_event_t event = NULL;
 	unsigned int size;
-	int result;
+	int result = 55555; // something odd for the logs
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_event = NULL;
 	OSyncData *odata = NULL;
 	OSyncError *state_db_error = NULL;
 	OSyncSinkStateDB *state_db = NULL;
 
 	state_db = osync_objtype_sink_get_state_db(sink);
-	if( !state_db )
+	if( !state_db ) {
 		msg = "Cannot start state_db!";
 		goto error;
+	}
 
 	odata = osync_change_get_data(change);
 	if( !odata ) {
@@ -753,6 +754,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	default:
 		osync_context_report_error(ctx, OSYNC_ERROR_NOT_SUPPORTED,
 					   "Unknown change type");
+		msg = "Unknown change type";
 		goto error;
 		break;
 	}
