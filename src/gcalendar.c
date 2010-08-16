@@ -436,6 +436,10 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			}
 			else {
 				ct = OSYNC_CHANGE_TYPE_ADDED;
+				if( !osync_sink_state_set(state_db, id, "1", &state_db_error) ) {
+					msg = "Error setting state_db for id";
+					goto error;
+				}
 			}
 		}
 
