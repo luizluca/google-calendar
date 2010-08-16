@@ -215,8 +215,12 @@ struct gc_plgdata
 	// contact sink/format
 	OSyncObjFormat *gcont_format;
 	// XSLT context resource struct
+	// google -> osync
 	struct xslt_resources *xslt_ctx_gcal;
 	struct xslt_resources *xslt_ctx_gcont;
+	// osync -> google
+	struct xslt_resources *xslt_ctx_ocal;
+	struct xslt_resources *xslt_ctx_ocont;
 };
 
 static void free_plg(struct gc_plgdata *plgdata)
@@ -236,6 +240,10 @@ static void free_plg(struct gc_plgdata *plgdata)
 		xslt_delete(plgdata->xslt_ctx_gcal);
 	if (plgdata->xslt_ctx_gcont)
 		xslt_delete(plgdata->xslt_ctx_gcont);
+	if (plgdata->xslt_ctx_ocal)
+		xslt_delete(plgdata->xslt_ctx_ocal);
+	if (plgdata->xslt_ctx_ocont)
+		xslt_delete(plgdata->xslt_ctx_ocont);
 	if (plgdata->cal_timestamp)
 		free(plgdata->cal_timestamp);
 	if (plgdata->cont_timestamp)
@@ -267,11 +275,19 @@ static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	if (result == -1)
 		goto error;
 
+	// google -> osync
 	snprintf(buffer, sizeof(buffer) - 1, "%sgcal2osync.xslt",
 		 plgdata->xslt_path);
 	if ((result = xslt_initialize(plgdata->xslt_ctx_gcal, buffer)))
 		goto error;
-	osync_trace(TRACE_INTERNAL, "\ndone calendar: %s\n", buffer);
+	osync_trace(TRACE_INTERNAL, "loaded calendar xslt: %s\n", buffer);
+
+	// osync -> google
+	snprintf(buffer, sizeof(buffer) - 1, "%sosync2gcal.xslt",
+		 plgdata->xslt_path);
+	if ((result = xslt_initialize(plgdata->xslt_ctx_ocal, buffer)))
+		goto error;
+	osync_trace(TRACE_INTERNAL, "loaded calendar xslt: %s\n", buffer);
 
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
@@ -299,11 +315,19 @@ static void gc_connect_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	if (result == -1)
 		goto error;
 
+	// google -> osync
 	snprintf(buffer, sizeof(buffer) - 1, "%sgcont2osync.xslt",
 		 plgdata->xslt_path);
 	if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer)))
 		goto error;
-	osync_trace(TRACE_INTERNAL, "\ndone contact: %s\n", buffer);
+	osync_trace(TRACE_INTERNAL, "loaded contact xslt: %s\n", buffer);
+
+	// osync -> google
+	snprintf(buffer, sizeof(buffer) - 1, "%sosync2gcont.xslt",
+		 plgdata->xslt_path);
+	if ((result = xslt_initialize(plgdata->xslt_ctx_ocont, buffer)))
+		goto error;
+	osync_trace(TRACE_INTERNAL, "loaded contact xslt: %s\n", buffer);
 
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
@@ -680,7 +704,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	}
 
 	// Convert to gdata format
-	result = xslt_transform(plgdata->xslt_ctx_gcal, osync_xml);
+	result = xslt_transform(plgdata->xslt_ctx_ocal, osync_xml);
 	if( result ) {
 		msg = "Failed converting from osync xmlevent to gcalendar\n";
 		goto error;
@@ -1113,14 +1137,18 @@ static void *gc_initialize(OSyncPlugin *plugin,
 
 
 	if( plgdata->calendar ) {
-		if (!(plgdata->xslt_ctx_gcal = xslt_new()))
+		plgdata->xslt_ctx_gcal = xslt_new();
+		plgdata->xslt_ctx_ocal = xslt_new();
+		if (!plgdata->xslt_ctx_gcal || !plgdata->xslt_ctx_ocal)
 			goto error_freeplg;
 		else
 			osync_trace(TRACE_INTERNAL, "\tsucceed creating xslt_gcal!\n");
 	}
 
 	if( plgdata->contacts ) {
-		if (!(plgdata->xslt_ctx_gcont = xslt_new()))
+		plgdata->xslt_ctx_gcont = xslt_new();
+		plgdata->xslt_ctx_ocont = xslt_new();
+		if (!plgdata->xslt_ctx_gcont || !plgdata->xslt_ctx_ocont)
 			goto error_freeplg;
 		else
 			osync_trace(TRACE_INTERNAL, "\tsucceed creating xslt_gcont!\n");
