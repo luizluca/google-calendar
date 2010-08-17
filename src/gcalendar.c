@@ -517,7 +517,7 @@ cleanup:
 	osync_free(timestamp);
 
 error:
-	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
+	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
 
 }
 
@@ -666,7 +666,7 @@ cleanup:
 	osync_free(timestamp);
 
 error:
-	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
+	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
 }
 
 static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
@@ -823,7 +823,7 @@ error:
 	if (raw_xml)
 		free(raw_xml);
 
-	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
+	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
 
@@ -938,7 +938,7 @@ error:
 	if (raw_xml)
 		free(raw_xml);
 
-	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, msg);
+	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
 	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
 
