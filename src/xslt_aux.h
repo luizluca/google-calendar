@@ -175,8 +175,6 @@ void xslt_delete(struct xslt_resources *ctx)
 		xmlFree(ctx->xml_str);
 	if (ctx->cur) {
 		xsltFreeStylesheet(ctx->cur);
-		xsltCleanupGlobals();
-		xmlCleanupParser();
 	}
 
 exit:
