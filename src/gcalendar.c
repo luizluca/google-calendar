@@ -427,6 +427,11 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		// grab ID for current change... this is a Google URL
 		const char *id = gcal_event_get_id(event);
 
+		// check state_db for id to see if we've seen this
+		// one before
+		const char *seen = osync_sink_state_get(state_db,
+						id, &state_db_error);
+
 		// determine changetype - we do not use osync_hashtable here
 		// because I believe that requires us to download all
 		// events in order to feed the timestamp to the hashtable
@@ -439,24 +444,14 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 				msg = "Error setting state_db for id";
 				goto error;
 			}
-			if( slow_sync ) {
+			if( slow_sync || !seen || seen[0] == '0' ) {
 				// in slow sync mode, we don't care about
 				// deleted objects
 				continue;
 			}
 		}
 		else {
-			// not deleted, so either ADDED or MODIFIED...
-			// check state_db for id to see if we've seen this
-			// one before
-			const char *seen = osync_sink_state_get(state_db,
-							id, &state_db_error);
-			if( !seen ) {
-				msg = "sink_state_get returned NULL";
-				goto error;
-			}
-
-			if( !slow_sync && seen[0] == '1' ) {
+			if( !slow_sync && seen && seen[0] == '1' ) {
 				// we've seen this object before
 				ct = OSYNC_CHANGE_TYPE_MODIFIED;
 			}
