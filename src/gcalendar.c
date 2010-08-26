@@ -495,12 +495,21 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 				osync_change_unref(chg);
 				goto cleanup;
 			}
-
-			osync_data_set_objtype(odata,
-					osync_objtype_sink_get_name(sink));
-			osync_change_set_data(chg, odata);
-			osync_data_unref(odata);
 		}
+		else {
+			// deleted changes need empty data sets
+			odata = osync_data_new(NULL, 0, plgdata->gcal_format,
+								&error);
+			if( !odata ) {
+				osync_change_unref(chg);
+				goto cleanup;
+			}
+		}
+
+		osync_data_set_objtype(odata,
+				osync_objtype_sink_get_name(sink));
+		osync_change_set_data(chg, odata);
+		osync_data_unref(odata);
 
 		osync_context_report_change(ctx, chg);
 		osync_change_unref(chg);
