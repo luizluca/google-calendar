@@ -258,6 +258,8 @@ static void free_plg(struct gc_plgdata *plgdata)
 		xmlFree(plgdata->password);
 	if (plgdata->gcal_format)
 		osync_objformat_unref(plgdata->gcal_format);
+	if (plgdata->gcont_format)
+		osync_objformat_unref(plgdata->gcont_format);
 	g_free(plgdata);
 }
 
