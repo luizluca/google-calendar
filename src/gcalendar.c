@@ -516,18 +516,17 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 
 
 exit:
-	// osync_sink_state_get uses osync_strdup
-	osync_free(timestamp);
 	osync_context_report_success(ctx);
-	return;
-
-cleanup:
-	osync_error_unref(&error);
-	// osync_sink_state_get uses osync_strdup
-	osync_free(timestamp);
+	goto cleanup;
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
+
+cleanup:
+	osync_error_unref(&error);
+
+	// osync_sink_state_get uses osync_strdup
+	osync_free(timestamp);
 
 }
 
