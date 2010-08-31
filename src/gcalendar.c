@@ -74,7 +74,7 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 			OSyncContext *ctx, void *data);
 
-static int timestamp_cmp(char *timestamp1, char *timestamp2)
+static int timestamp_cmp(const char *timestamp1, const char *timestamp2)
 {
 	// timestamp (RFC3339) formating string
 	char format[] = "%FT%T";
@@ -357,7 +357,9 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
 	int result = 0, i;
-	char *timestamp = NULL, *msg = NULL, *raw_xml = NULL;
+	char *timestamp = NULL, *msg = NULL;
+	const char *raw_xml = NULL;
+	char *seen = NULL;
 	gcal_event_t event;
 	OSyncError *state_db_error = NULL;
 	OSyncSinkStateDB *state_db = NULL;
@@ -401,6 +403,12 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 
 	// Calendar returns most recently updated event as first element
 	for (i = 0; i < plgdata->all_events.length; ++i) {
+		// cleanup for a fresh run
+		if (seen) {
+			osync_free(seen);
+			seen = NULL;
+		}
+
 		// grab the next event object
 		event = gcal_event_element(&(plgdata->all_events), i);
 		if (!event) {
@@ -429,12 +437,14 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			    timestamp, gcal_event_get_updated(event));
 
 		// grab ID for current change... this is a Google URL
-		const char *id = gcal_event_get_id(event);
+		// the edit_url and etag are required later for modification,
+		// so save them in the state_db as the "seen" marker
+		const char *url = gcal_event_get_url(event);
+		const char *etag = gcal_event_get_etag(event);
 
 		// check state_db for id to see if we've seen this
 		// one before
-		const char *seen = osync_sink_state_get(state_db,
-						id, &state_db_error);
+		seen = osync_sink_state_get(state_db, url, &state_db_error);
 
 		// determine changetype - we do not use osync_hashtable here
 		// because I believe that requires us to download all
@@ -444,27 +454,35 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		OSyncChangeType ct = OSYNC_CHANGE_TYPE_UNKNOWN;
 		if( gcal_event_is_deleted(event) ) {
 			ct = OSYNC_CHANGE_TYPE_DELETED;
-			if( !osync_sink_state_set(state_db, id, "0", &state_db_error) ) {
-				msg = "Error setting state_db for id";
+
+			// remember this item as deleted
+			if( !osync_sink_state_set(state_db, url, "", &state_db_error) ) {
+				msg = "Error setting state_db with url";
 				goto error;
 			}
-			if( slow_sync || !seen || seen[0] == '0' ) {
+			if( slow_sync || !seen || strlen(seen) == 0 ) {
 				// in slow sync mode, we don't care about
 				// deleted objects
 				continue;
 			}
 		}
 		else {
-			if( !slow_sync && seen && seen[0] == '1' ) {
+			if( !slow_sync && seen && strlen(seen) > 0 ) {
 				// we've seen this object before
 				ct = OSYNC_CHANGE_TYPE_MODIFIED;
 			}
 			else {
 				ct = OSYNC_CHANGE_TYPE_ADDED;
-				if( !osync_sink_state_set(state_db, id, "1", &state_db_error) ) {
-					msg = "Error setting state_db for id";
-					goto error;
-				}
+			}
+
+			// the etag will have changed for MODIFIED, and
+			// it's a new item if ADDED, so save the url/etag 
+			// string either way
+			// FIXME - should perhaps set this only after
+			// success, such as in the done() plugin call
+			if( !osync_sink_state_set(state_db, url, etag, &state_db_error) ) {
+				msg = "Error setting state_db with url/etag";
+				goto error;
 			}
 		}
 
@@ -474,7 +492,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			goto cleanup;
 
 		// setup the change
-		osync_change_set_uid(chg, id);
+		osync_change_set_uid(chg, url);
 		osync_change_set_hash(chg, gcal_event_get_updated(event));
 		osync_change_set_changetype(chg, ct);
 
@@ -528,6 +546,8 @@ cleanup:
 	// osync_sink_state_get uses osync_strdup
 	osync_free(timestamp);
 
+	if (seen)
+		osync_free(seen);
 }
 
 
@@ -543,7 +563,8 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
 	int result = 0, i;
-	char *timestamp = NULL, *msg, *raw_xml = NULL;
+	char *timestamp = NULL, *msg;
+	const char *raw_xml = NULL;
 	gcal_contact_t contact;
 	OSyncError *state_db_error = NULL;
 
@@ -690,6 +711,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	unsigned int size;
 	int result = 55555; // something odd for the logs
 	char *osync_xml = NULL, *msg = NULL, *raw_xml = NULL, *updated_event = NULL;
+	char *etag = NULL;
 	OSyncData *odata = NULL;
 	OSyncError *state_db_error = NULL;
 	OSyncSinkStateDB *state_db = NULL;
@@ -706,22 +728,38 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		goto error;
 	}
 
-	osync_data_get_data(odata, &osync_xml, &size);
-	if( !osync_xml ) {
-		msg = "Failed getting xml from xmlobj!\n";
-		goto error;
+	// transform data, only for ADD / MODIFY
+	if( osync_change_get_changetype(change) != OSYNC_CHANGE_TYPE_DELETED ) {
+		osync_data_get_data(odata, &osync_xml, &size);
+		if( !osync_xml ) {
+			msg = "Failed getting xml from xmlobj!\n";
+			goto error;
+		}
+
+		// Convert to gdata format
+		result = xslt_transform(plgdata->xslt_ctx_ocal, osync_xml);
+		if( result ) {
+			msg = "Failed converting from osync xmlevent to gcalendar\n";
+			osync_trace(TRACE_INTERNAL, "--- osync_uid: %s",
+						osync_change_get_uid(change));
+			osync_trace(TRACE_INTERNAL,"Failed converting from osync xmlevent to gcalendar: %u, %s",
+						size, osync_xml);
+			goto error;
+		}
+
+		osync_trace(TRACE_INTERNAL, "--- transformed xml: %s",
+				(char*) plgdata->xslt_ctx_ocal->xml_str);
+
+		raw_xml = vtime2gtime((char*)plgdata->xslt_ctx_ocal->xml_str);
+		osync_trace(TRACE_INTERNAL, "--- gtime adjusted: %s", raw_xml);
 	}
 
-	// Convert to gdata format
-	result = xslt_transform(plgdata->xslt_ctx_ocal, osync_xml);
-	if( result ) {
-		msg = "Failed converting from osync xmlevent to gcalendar\n";
-		goto error;
+	// check state_db for id to see if we've seen this
+	// one before, and grab the etag if so
+	if( osync_change_get_uid(change) ) {
+		etag = osync_sink_state_get(state_db,
+			osync_change_get_uid(change), &state_db_error);
 	}
-
-	raw_xml = vtime2gtime( (char*) plgdata->xslt_ctx_gcal->xml_str );
-
-	osync_trace(TRACE_EXIT, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
 	switch( osync_change_get_changetype(change) )
 	{
@@ -730,7 +768,10 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 							&updated_event);
 		if( result == -1 ) {
 			msg = "Failed adding new event!\n";
-			result = gcal_status_httpcode(plgdata->calendar);
+			osync_trace(TRACE_INTERNAL, "Failed adding new event! HTTP code: %d, %s, %s\n",
+				gcal_status_httpcode(plgdata->calendar),
+				gcal_status_msg(plgdata->calendar),
+				gcal_access_buffer(plgdata->calendar));
 			goto error;
 		}
 
@@ -740,21 +781,35 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			goto error;
 		}
 
+		osync_trace(TRACE_INTERNAL, "New event added: url = %s etag = %s",
+			gcal_event_get_url(event),
+			gcal_event_get_etag(event));
+
 		// mark this as "seen"
-		if( !osync_sink_state_set(state_db, gcal_event_get_id(event), "1", &state_db_error) ) {
+		if( !osync_sink_state_set(state_db, gcal_event_get_url(event), gcal_event_get_etag(event), &state_db_error) ) {
 			msg = "Error setting added state";
 			goto error;
 		}
 
 		// tell opensync to store the new ID
-		osync_change_set_uid(change, gcal_event_get_id(event));
+		osync_change_set_uid(change, gcal_event_get_url(event));
 		break;
 
 	case OSYNC_CHANGE_TYPE_MODIFIED:
+		if( !etag ) {
+			msg = "Trying to modify an unknown entry!";
+			goto error;
+		}
+
 		result = gcal_update_xmlentry(plgdata->calendar, raw_xml,
-						&updated_event, NULL, NULL);
+			&updated_event, osync_change_get_uid(change), etag);
 		if( result == -1 ) {
 			msg = "Failed editing event!\n";
+			osync_trace(TRACE_INTERNAL, "Failed editing event: (etag: %s). HTTP code: %d, %s, %s\n",
+				etag,
+				gcal_status_httpcode(plgdata->calendar),
+				gcal_status_msg(plgdata->calendar),
+				gcal_access_buffer(plgdata->calendar));
 			goto error;
 		}
 
@@ -764,23 +819,49 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			goto error;
 		}
 
+		osync_trace(TRACE_INTERNAL,"Modified event: url = %s etag = %s",
+			gcal_event_get_url(event),
+			gcal_event_get_etag(event));
+
+		// make sure that new ID is the same as existing UID
+		if( strcmp(osync_change_get_uid(change), gcal_event_get_url(event)) != 0 ) {
+			msg = "Opensync UID != modified event ID";
+			osync_trace(TRACE_INTERNAL, "Opensync UID != modified event ID: uid = %s, event_id = %s, updated_event = %s",
+				osync_change_get_uid(change),
+				gcal_event_get_url(event),
+				updated_event);
+			goto error;
+		}
+
 		// mark this as "seen"
-		if( !osync_sink_state_set(state_db, gcal_event_get_id(event), "1", &state_db_error) ) {
+		if( !osync_sink_state_set(state_db, gcal_event_get_url(event), gcal_event_get_etag(event), &state_db_error) ) {
 			msg = "Error setting modified state";
 			goto error;
 		}
 		break;
 
 	case OSYNC_CHANGE_TYPE_DELETED:
-		result = gcal_erase_xmlentry(plgdata->calendar, raw_xml);
+		// create empty event, set the edit_url, and then delete
+		event = gcal_event_new(NULL);
+		result = gcal_event_set_url(event, osync_change_get_uid(change));
+		if( result == -1 ) {
+			msg = "Failed setting url for event delete\n";
+			goto error;
+		}
+
+		result = gcal_erase_event(plgdata->calendar, event);
 		if( result == -1 ) {
 			msg = "Failed deleting event!\n";
+			osync_trace(TRACE_INTERNAL, "Failed deleting event! HTTP code: %d, %s, %s\n",
+				gcal_status_httpcode(plgdata->calendar),
+				gcal_status_msg(plgdata->calendar),
+				gcal_access_buffer(plgdata->calendar));
 			goto error;
 		}
 
 		// mark this as "unseen"
 		if( !osync_sink_state_set(state_db,
-			osync_change_get_uid(change), "0", &state_db_error) )
+			osync_change_get_uid(change), "", &state_db_error) )
 		{
 			msg = "Error setting modified state";
 			goto error;
@@ -792,7 +873,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		goto error;
 	}
 
-	if (event) {
+	if( event && gcal_event_get_updated(event) ) {
 		// update the timestamp
 		if( plgdata->cal_timestamp ) {
 			// only if newer
@@ -828,6 +909,8 @@ cleanup:
 		gcal_event_delete(event);
 	if (raw_xml)
 		free(raw_xml);
+	if (etag)
+		free(etag);
 }
 
 static void gc_commit_change_contact(OSyncObjTypeSink *sink,
