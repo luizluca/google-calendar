@@ -746,6 +746,9 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			msg = "Error setting added state";
 			goto error;
 		}
+
+		// tell opensync to store the new ID
+		osync_change_set_uid(change, gcal_event_get_id(event));
 		break;
 
 	case OSYNC_CHANGE_TYPE_MODIFIED:
@@ -815,8 +818,6 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			goto error;
 		}
 
-		// Inform the new ID
-		osync_change_set_uid(change, gcal_event_get_id(event));
 		gcal_event_delete(event);
 
 	}
