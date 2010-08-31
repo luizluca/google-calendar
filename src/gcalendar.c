@@ -82,8 +82,12 @@ static int timestamp_cmp(char *timestamp1, char *timestamp2)
 	time_t t_first, t_second;
 	int result = 0;
 
-	if (!timestamp1 || !timestamp2)
+	if (!timestamp1 && !timestamp2)
+		return 0;
+	if (!timestamp2)
 		return 1;
+	if (!timestamp1)
+		return -1;
 
 	// From timestamp string to time structure
 	timestamp2tm(timestamp1, format, &first);
