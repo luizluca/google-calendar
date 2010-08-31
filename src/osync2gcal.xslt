@@ -44,10 +44,12 @@
 	  </xsl:attribute>
 	</link>
 
+	<!-- May not always have a contact, and google whines if it's empty -->
+	<xsl:if test="string-length(descendant::Contact/Content) &gt; 0">
 	<author>
 	  <name><xsl:value-of select="descendant::Contact/Content"/></name>
-	  <!-- TODO: add author's email -->
 	</author>
+	</xsl:if>
 
 	<!-- Hard-coded for while... -->
 	<gd:visibility value="http://schemas.google.com/g/2005#event.default"/>
