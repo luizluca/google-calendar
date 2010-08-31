@@ -789,15 +789,9 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		break;
 
 	default:
-		osync_context_report_error(ctx, OSYNC_ERROR_NOT_SUPPORTED,
-					   "Unknown change type");
 		msg = "Unknown change type";
 		goto error;
-		break;
 	}
-
-	if (updated_event)
-		free(updated_event);
 
 	if (event) {
 		// update the timestamp
@@ -817,25 +811,24 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			msg = "Failed copying contact timestamp!\n";
 			goto error;
 		}
-
-		gcal_event_delete(event);
-
 	}
-
-	//	free(osync_xml);
 
 	osync_context_report_success(ctx);
 	osync_trace(TRACE_EXIT, "%s", __func__);
 
-	return;
+	goto cleanup;
+
 error:
+	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
+	osync_trace(TRACE_EXIT, "%s:%sResult code: %d", __func__, msg, result);
+
+cleanup:
 	if (updated_event)
 		free(updated_event);
+	if (event)
+		gcal_event_delete(event);
 	if (raw_xml)
 		free(raw_xml);
-
-	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
-	osync_trace(TRACE_EXIT, "%s:%sHTTP code: %d", __func__, msg, result);
 }
 
 static void gc_commit_change_contact(OSyncObjTypeSink *sink,
