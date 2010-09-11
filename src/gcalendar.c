@@ -323,9 +323,9 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	char *timestamp = NULL, *msg = NULL;
 	const char *raw_xml = NULL;
 	char *seen = NULL;
-	gcal_event_t event;
 	OSyncError *state_db_error = NULL;
 	OSyncSinkStateDB *state_db = NULL;
+	gcal_event_t event;
 	struct gcal_event_array all_events;
 
 	state_db = osync_objtype_sink_get_state_db(sink);
@@ -346,8 +346,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		result = gcal_get_events(gdata->handle, &all_events);
 
 	} else {
-		result = gcal_get_updated_events(gdata->handle,
-						 &all_events,
+		result = gcal_get_updated_events(gdata->handle, &all_events,
 						 timestamp);
 	}
 
@@ -520,45 +519,39 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 			osync_bool slow_sync, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, ctx);
-	char buffer[512];
 	struct gc_gdata *gdata = data;
-	char slow_sync_flag = 0;
 	OSyncError *error = NULL;
 	OSyncData *odata = NULL;
 	OSyncChange *chg = NULL;
 	int result = 0, i;
-	char *timestamp = NULL, *msg;
+	char *timestamp = NULL, *msg = NULL;
 	const char *raw_xml = NULL;
-	gcal_contact_t contact;
+	char *seen = NULL;
 	OSyncError *state_db_error = NULL;
+	OSyncSinkStateDB *state_db = NULL;
+	gcal_contact_t contact;
 	struct gcal_contact_array all_contacts;
 
-	if (!(osync_objtype_sink_get_state_db(sink)))
+	state_db = osync_objtype_sink_get_state_db(sink);
+	if( !state_db )
 		goto error;
 
-	timestamp = osync_sink_state_get(osync_objtype_sink_get_state_db(sink),
-					  gdata->timestamp_name,
+	timestamp = osync_sink_state_get(state_db, gdata->timestamp_name,
 					  &state_db_error);
 	if (!timestamp) {
 		msg = "gcontact: Anchor returned is NULL!";
 		goto error;
 	}
 
-	if (strlen(timestamp) > 0)
-		osync_trace(TRACE_INTERNAL, "timestamp is: %s\n", timestamp);
-	else
-		osync_trace(TRACE_INTERNAL, "first sync!\n");
+	osync_trace(TRACE_INTERNAL, "timestamp is: '%s'\n", timestamp);
 
-	if (slow_sync) {
-		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for slow syncing...\n");
-		slow_sync_flag = 1;
+	if (slow_sync || strlen(timestamp) == 0) {
+		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: slow sync, or first time\n");
 		result = gcal_get_contacts(gdata->handle, &all_contacts);
 
 	} else {
-		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for fast syncing...\n");
 		gcal_deleted(gdata->handle, SHOW);
-		result = gcal_get_updated_contacts(gdata->handle,
-						   &all_contacts,
+		result = gcal_get_updated_contacts(gdata->handle, &all_contacts,
 						   timestamp);
 	}
 
@@ -570,91 +563,157 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	osync_trace(TRACE_INTERNAL, "gcontact: got them all!\n");
 	if (all_contacts.length == 0) {
 		osync_trace(TRACE_INTERNAL, "gcontact: no changes...\n");
-		goto no_changes;
+		goto exit;
 	} else
 		osync_trace(TRACE_INTERNAL, "gcontact: changes count: %d\n",
 			    all_contacts.length);
 
 	// Contacts returns most recently updated entry as last element
-	contact = gcal_contact_element(&all_contacts, all_contacts.length - 1);
-	if (!contact) {
-		msg = "Cannot access last updated contact!\n";
-		goto error;
-	}
-	gdata->timestamp = strdup(gcal_contact_get_updated(contact));
-	if (!gdata->timestamp) {
-		msg = "Failed copying contact timestamp!\n";
-		goto error;
-	}
-
 	for (i = 0; i < all_contacts.length; ++i) {
+		// cleanup for a fresh run
+		if (seen) {
+			osync_free(seen);
+			seen = NULL;
+		}
+
+		// grab the next event object
 		contact = gcal_contact_element(&all_contacts, i);
-		if (!contact)
+		if (!contact) {
+			osync_trace(TRACE_INTERNAL, "Cannot access updated contact %d", i);
 			goto error;
+		}
+
+		// save first timestamp as new "done" mark
+		if (i == 0) {
+			if (gdata->timestamp)
+				free(gdata->timestamp);
+			gdata->timestamp = strdup(gcal_contact_get_updated(contact));
+			if (!gdata->timestamp) {
+				msg = "Failed copying contact timestamp!\n";
+				goto error;
+			}
+		}
+
+		// are we done yet?  libgcal includes the entry with the
+		// given timestamp, so if the timestamp of this contact
+		// is <= to the timestamp we asked for, then we're done
+		if( !slow_sync && timestamp_cmp(gcal_contact_get_updated(contact), timestamp) <= 0 )
+			break;
 
 		osync_trace(TRACE_INTERNAL, "gcontact: timestamp:%s\tcontact:%s\n",
 			    timestamp, gcal_contact_get_updated(contact));
-		// Workaround for inclusive returned results
-		if ((timestamp_cmp(timestamp, gcal_contact_get_updated(contact)) == 0)
-		    && !slow_sync_flag
-		    && !gcal_contact_is_deleted(contact)) {
-			osync_trace(TRACE_INTERNAL, "gcontact: old contact.");
-			continue;
-		} else
-			osync_trace(TRACE_INTERNAL, "gcontact: new or deleted contact!");
 
-		raw_xml = gcal_contact_get_xml(contact);
-		if ((result = xslt_transform(gdata->xslt_google2osync,
-					     raw_xml)))
-			goto error;
+		// grab ID for current change... this is a Google URL
+		// the edit_url and etag are required later for modification,
+		// so save them in the state_db as the "seen" marker
+		const char *url = gcal_contact_get_url(contact);
+		const char *etag = gcal_contact_get_etag(contact);
 
-		raw_xml = (char*) gdata->xslt_google2osync->xml_str;
-		odata = osync_data_new(strdup(raw_xml),
-				       strlen(raw_xml),
-				       gdata->format, &error);
-		if (!odata)
+		// check state_db for id to see if we've seen this
+		// one before
+		seen = osync_sink_state_get(state_db, url, &state_db_error);
+
+		// determine changetype - we do not use osync_hashtable here
+		// because I believe that requires us to download all
+		// contacts in order to feed the timestamp to the hashtable
+		// function... hashtable is more suited to a local access,
+		// instead of internet access.
+		OSyncChangeType ct = OSYNC_CHANGE_TYPE_UNKNOWN;
+		if( gcal_contact_is_deleted(contact) ) {
+			ct = OSYNC_CHANGE_TYPE_DELETED;
+
+			// remember this item as deleted
+			if( !osync_sink_state_set(state_db, url, "", &state_db_error) ) {
+				msg = "Error setting state_db with url";
+				goto error;
+			}
+			if( slow_sync || !seen || strlen(seen) == 0 ) {
+				// in slow sync mode, we don't care about
+				// deleted objects
+				continue;
+			}
+		}
+		else {
+			if( !slow_sync && seen && strlen(seen) > 0 ) {
+				// we've seen this object before
+				ct = OSYNC_CHANGE_TYPE_MODIFIED;
+			}
+			else {
+				ct = OSYNC_CHANGE_TYPE_ADDED;
+			}
+
+			// the etag will have changed for MODIFIED, and
+			// it's a new item if ADDED, so save the url/etag 
+			// string either way
+			// FIXME - should perhaps set this only after
+			// success, such as in the done() plugin call
+			if( !osync_sink_state_set(state_db, url, etag, &state_db_error) ) {
+				msg = "Error setting state_db with url/etag";
+				goto error;
+			}
+		}
+
+		// create change object
+		chg = osync_change_new(&error);
+		if( !chg )
 			goto cleanup;
 
-		if (!(chg = osync_change_new(&error)))
-			goto cleanup;
-		osync_data_set_objtype(odata, osync_objtype_sink_get_name(sink));
+		// setup the change
+		osync_change_set_uid(chg, url);
+		osync_change_set_hash(chg, gcal_contact_get_updated(contact));
+		osync_change_set_changetype(chg, ct);
+
+		// fill in the data
+		if( ct != OSYNC_CHANGE_TYPE_DELETED ) {
+			raw_xml = gcal_contact_get_xml(contact);
+			if( xslt_transform(gdata->xslt_google2osync, raw_xml) ) {
+				osync_change_unref(chg);
+				goto error;
+			}
+
+			raw_xml = (char*) gdata->xslt_google2osync->xml_str;
+			odata = osync_data_new(strdup(raw_xml),
+					       strlen(raw_xml),
+					       gdata->format, &error);
+			if( !odata ) {
+				osync_change_unref(chg);
+				goto cleanup;
+			}
+		}
+		else {
+			// deleted changes need empty data sets
+			odata = osync_data_new(NULL, 0, gdata->format, &error);
+			if( !odata ) {
+				osync_change_unref(chg);
+				goto cleanup;
+			}
+		}
+
+		osync_data_set_objtype(odata,
+				osync_objtype_sink_get_name(sink));
 		osync_change_set_data(chg, odata);
 		osync_data_unref(odata);
-
-		osync_change_set_uid(chg, gcal_contact_get_id(contact));
-
-		if (slow_sync_flag)
-			osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_ADDED);
-		else
-			if (gcal_contact_is_deleted(contact)) {
-				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_DELETED);
-				osync_trace(TRACE_INTERNAL, "deleted entry!");
-			}
-			else
-				osync_change_set_changetype(chg, OSYNC_CHANGE_TYPE_MODIFIED);
 
 		osync_context_report_change(ctx, chg);
 		osync_change_unref(chg);
 	}
 
-no_changes:
-
-	osync_trace(TRACE_INTERNAL, "\ndone contact: %s\n", buffer);
-
-//exit:
-	// osync_sink_state_get uses osync_strdup
-	osync_free(timestamp);
+exit:
 	osync_context_report_success(ctx);
-	return;
-
-cleanup:
-	osync_error_unref(&error);
-	// osync_sink_state_get uses osync_strdup
-	osync_free(timestamp);
-	gcal_cleanup_contacts(&all_contacts);
+	goto cleanup;
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
+
+cleanup:
+	osync_error_unref(&error);
+	gcal_cleanup_contacts(&all_contacts);
+
+	// osync_sink_state_get uses osync_strdup
+	osync_free(timestamp);
+
+	if (seen)
+		osync_free(seen);
 }
 
 static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
