@@ -199,6 +199,16 @@ char* vtime2gtime(const char *data)
 	return ret;
 }
 
+struct gc_gdata
+{
+	char *timestamp;
+	gcal_t handle;
+	// sink/format
+	OSyncObjFormat *format;
+	// XSLT context resource struct
+	struct xslt_resources *xslt_google2osync;
+	struct xslt_resources *xslt_osync2google;
+};
 
 struct gc_plgdata
 {
@@ -208,50 +218,31 @@ struct gc_plgdata
 	char *timezone;
 	char *xslt_path;
 	// libgcal resources
-	char *cal_timestamp;
-	char *cont_timestamp;
-	gcal_t calendar;
-	gcal_t contacts;
-	struct gcal_event_array all_events;
-	struct gcal_contact_array all_contacts;
-	// calendar sink/format
-	OSyncObjFormat *gcal_format;
-	// contact sink/format
-	OSyncObjFormat *gcont_format;
-	// XSLT context resource struct
-	// google -> osync
-	struct xslt_resources *xslt_ctx_gcal;
-	struct xslt_resources *xslt_ctx_gcont;
-	// osync -> google
-	struct xslt_resources *xslt_ctx_ocal;
-	struct xslt_resources *xslt_ctx_ocont;
+	struct gc_gdata cal;
+	struct gc_gdata cont;
 };
+
+static void free_gdata(struct gc_gdata *gdata)
+{
+	if( gdata->timestamp )
+		free(gdata->timestamp);
+	if( gdata->handle )
+		gcal_delete(gdata->handle);
+	if( gdata->format)
+		osync_objformat_unref(gdata->format);
+	if( gdata->xslt_google2osync )
+		xslt_delete(gdata->xslt_google2osync);
+	if( gdata->xslt_osync2google )
+		xslt_delete(gdata->xslt_osync2google);
+}
 
 static void free_plg(struct gc_plgdata *plgdata)
 {
-	if (plgdata->calendar) {
-		gcal_delete(plgdata->calendar);
-		gcal_cleanup_events(&(plgdata->all_events));
-	}
-	if (plgdata->contacts) {
-		gcal_delete(plgdata->contacts);
-		gcal_cleanup_contacts(&(plgdata->all_contacts));
-	}
+	free_gdata(&plgdata->cal);
+	free_gdata(&plgdata->cont);
 
 	if (plgdata->xslt_path)
 		free(plgdata->xslt_path);
-	if (plgdata->xslt_ctx_gcal)
-		xslt_delete(plgdata->xslt_ctx_gcal);
-	if (plgdata->xslt_ctx_gcont)
-		xslt_delete(plgdata->xslt_ctx_gcont);
-	if (plgdata->xslt_ctx_ocal)
-		xslt_delete(plgdata->xslt_ctx_ocal);
-	if (plgdata->xslt_ctx_ocont)
-		xslt_delete(plgdata->xslt_ctx_ocont);
-	if (plgdata->cal_timestamp)
-		free(plgdata->cal_timestamp);
-	if (plgdata->cont_timestamp)
-		free(plgdata->cont_timestamp);
 	if (plgdata->timezone)
 		free(plgdata->timezone);
 	if (plgdata->url)
@@ -260,10 +251,6 @@ static void free_plg(struct gc_plgdata *plgdata)
 		xmlFree(plgdata->username);
 	if (plgdata->password)
 		xmlFree(plgdata->password);
-	if (plgdata->gcal_format)
-		osync_objformat_unref(plgdata->gcal_format);
-	if (plgdata->gcont_format)
-		osync_objformat_unref(plgdata->gcont_format);
 	g_free(plgdata);
 }
 
@@ -276,7 +263,7 @@ static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	OSyncError *error = NULL;
 	char buffer[512];
 
-	result = gcal_get_authentication(plgdata->calendar, plgdata->username,
+	result = gcal_get_authentication(plgdata->cal.handle, plgdata->username,
 					 plgdata->password);
 	if (result == -1)
 		goto error;
@@ -284,14 +271,14 @@ static void gc_connect_calendar(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	// google -> osync
 	snprintf(buffer, sizeof(buffer) - 1, "%sgcal2osync.xslt",
 		 plgdata->xslt_path);
-	if ((result = xslt_initialize(plgdata->xslt_ctx_gcal, buffer)))
+	if ((result = xslt_initialize(plgdata->cal.xslt_google2osync, buffer)))
 		goto error;
 	osync_trace(TRACE_INTERNAL, "loaded calendar xslt: %s\n", buffer);
 
 	// osync -> google
 	snprintf(buffer, sizeof(buffer) - 1, "%sosync2gcal.xslt",
 		 plgdata->xslt_path);
-	if ((result = xslt_initialize(plgdata->xslt_ctx_ocal, buffer)))
+	if ((result = xslt_initialize(plgdata->cal.xslt_osync2google, buffer)))
 		goto error;
 	osync_trace(TRACE_INTERNAL, "loaded calendar xslt: %s\n", buffer);
 
@@ -316,7 +303,7 @@ static void gc_connect_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	OSyncError *error = NULL;
 	char buffer[512];
 
-	result = gcal_get_authentication(plgdata->contacts, plgdata->username,
+	result = gcal_get_authentication(plgdata->cont.handle, plgdata->username,
 					 plgdata->password);
 	if (result == -1)
 		goto error;
@@ -324,14 +311,14 @@ static void gc_connect_contact(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	// google -> osync
 	snprintf(buffer, sizeof(buffer) - 1, "%sgcont2osync.xslt",
 		 plgdata->xslt_path);
-	if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer)))
+	if ((result = xslt_initialize(plgdata->cont.xslt_google2osync, buffer)))
 		goto error;
 	osync_trace(TRACE_INTERNAL, "loaded contact xslt: %s\n", buffer);
 
 	// osync -> google
 	snprintf(buffer, sizeof(buffer) - 1, "%sosync2gcont.xslt",
 		 plgdata->xslt_path);
-	if ((result = xslt_initialize(plgdata->xslt_ctx_ocont, buffer)))
+	if ((result = xslt_initialize(plgdata->cont.xslt_osync2google, buffer)))
 		goto error;
 	osync_trace(TRACE_INTERNAL, "loaded contact xslt: %s\n", buffer);
 
@@ -363,6 +350,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	gcal_event_t event;
 	OSyncError *state_db_error = NULL;
 	OSyncSinkStateDB *state_db = NULL;
+	struct gcal_event_array all_events;
 
 	state_db = osync_objtype_sink_get_state_db(sink);
 	if( !state_db )
@@ -379,11 +367,11 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 
 	if (slow_sync || strlen(timestamp) == 0) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcal: slow sync, or first time\n");
-		result = gcal_get_events(plgdata->calendar, &(plgdata->all_events));
+		result = gcal_get_events(plgdata->cal.handle, &all_events);
 
 	} else {
-		result = gcal_get_updated_events(plgdata->calendar,
-						 &(plgdata->all_events),
+		result = gcal_get_updated_events(plgdata->cal.handle,
+						 &all_events,
 						 timestamp);
 	}
 
@@ -393,16 +381,16 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	}
 
 	osync_trace(TRACE_INTERNAL, "gcalendar: got them all!\n");
-	if (plgdata->all_events.length == 0) {
+	if (all_events.length == 0) {
 		osync_trace(TRACE_INTERNAL, "gcalendar: no changes...\n");
 		goto exit;
 	} else {
 		osync_trace(TRACE_INTERNAL, "gcalendar: changes count: %d\n",
-			    plgdata->all_events.length);
+			    all_events.length);
 	}
 
 	// Calendar returns most recently updated event as first element
-	for (i = 0; i < plgdata->all_events.length; ++i) {
+	for (i = 0; i < all_events.length; ++i) {
 		// cleanup for a fresh run
 		if (seen) {
 			osync_free(seen);
@@ -410,7 +398,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		}
 
 		// grab the next event object
-		event = gcal_event_element(&(plgdata->all_events), i);
+		event = gcal_event_element(&all_events, i);
 		if (!event) {
 			osync_trace(TRACE_INTERNAL, "Cannot access updated event %d", i);
 			goto error;
@@ -418,10 +406,10 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 
 		// save first timestamp as new "done" mark
 		if (i == 0) {
-			if (plgdata->cal_timestamp)
-				free(plgdata->cal_timestamp);
-			plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
-			if (!plgdata->cal_timestamp) {
+			if (plgdata->cal.timestamp)
+				free(plgdata->cal.timestamp);
+			plgdata->cal.timestamp = strdup(gcal_event_get_updated(event));
+			if (!plgdata->cal.timestamp) {
 				msg = "Failed copying event timestamp!\n";
 				goto error;
 			}
@@ -499,15 +487,15 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		// fill in the data
 		if( ct != OSYNC_CHANGE_TYPE_DELETED ) {
 			raw_xml = gcal_event_get_xml(event);
-			if( xslt_transform(plgdata->xslt_ctx_gcal, raw_xml) ) {
+			if( xslt_transform(plgdata->cal.xslt_google2osync, raw_xml) ) {
 				osync_change_unref(chg);
 				goto error;
 			}
 
-			raw_xml = (char*) plgdata->xslt_ctx_gcal->xml_str;
+			raw_xml = (char*) plgdata->cal.xslt_google2osync->xml_str;
 			odata = osync_data_new(strdup(raw_xml),
 					       strlen(raw_xml),
-					       plgdata->gcal_format, &error);
+					       plgdata->cal.format, &error);
 			if( !odata ) {
 				osync_change_unref(chg);
 				goto cleanup;
@@ -515,7 +503,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		}
 		else {
 			// deleted changes need empty data sets
-			odata = osync_data_new(NULL, 0, plgdata->gcal_format,
+			odata = osync_data_new(NULL, 0, plgdata->cal.format,
 								&error);
 			if( !odata ) {
 				osync_change_unref(chg);
@@ -542,6 +530,7 @@ error:
 
 cleanup:
 	osync_error_unref(&error);
+	gcal_cleanup_events(&all_events);
 
 	// osync_sink_state_get uses osync_strdup
 	osync_free(timestamp);
@@ -567,6 +556,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	const char *raw_xml = NULL;
 	gcal_contact_t contact;
 	OSyncError *state_db_error = NULL;
+	struct gcal_contact_array all_contacts;
 
 	if (!(osync_objtype_sink_get_state_db(sink)))
 		goto error;
@@ -586,13 +576,13 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	if (slow_sync) {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for slow syncing...\n");
 		slow_sync_flag = 1;
-		result = gcal_get_contacts(plgdata->contacts, &(plgdata->all_contacts));
+		result = gcal_get_contacts(plgdata->cont.handle, &all_contacts);
 
 	} else {
 		osync_trace(TRACE_INTERNAL, "\n\t\tgcont: Client asked for fast syncing...\n");
-		gcal_deleted(plgdata->contacts, SHOW);
-		result = gcal_get_updated_contacts(plgdata->contacts,
-						   &(plgdata->all_contacts),
+		gcal_deleted(plgdata->cont.handle, SHOW);
+		result = gcal_get_updated_contacts(plgdata->cont.handle,
+						   &all_contacts,
 						   timestamp);
 	}
 
@@ -602,28 +592,27 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 	}
 
 	osync_trace(TRACE_INTERNAL, "gcontact: got them all!\n");
-	if (plgdata->all_contacts.length == 0) {
+	if (all_contacts.length == 0) {
 		osync_trace(TRACE_INTERNAL, "gcontact: no changes...\n");
 		goto no_changes;
 	} else
 		osync_trace(TRACE_INTERNAL, "gcontact: changes count: %d\n",
-			    plgdata->all_contacts.length);
+			    all_contacts.length);
 
 	// Contacts returns most recently updated entry as last element
-	contact = gcal_contact_element(&(plgdata->all_contacts),
-				       (plgdata->all_contacts.length - 1));
+	contact = gcal_contact_element(&all_contacts, all_contacts.length - 1);
 	if (!contact) {
 		msg = "Cannot access last updated contact!\n";
 		goto error;
 	}
-	plgdata->cont_timestamp = strdup(gcal_contact_get_updated(contact));
-	if (!plgdata->cont_timestamp) {
+	plgdata->cont.timestamp = strdup(gcal_contact_get_updated(contact));
+	if (!plgdata->cont.timestamp) {
 		msg = "Failed copying contact timestamp!\n";
 		goto error;
 	}
 
-	for (i = 0; i < plgdata->all_contacts.length; ++i) {
-		contact = gcal_contact_element(&(plgdata->all_contacts), i);
+	for (i = 0; i < all_contacts.length; ++i) {
+		contact = gcal_contact_element(&all_contacts, i);
 		if (!contact)
 			goto error;
 
@@ -639,14 +628,14 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 			osync_trace(TRACE_INTERNAL, "gcontact: new or deleted contact!");
 
 		raw_xml = gcal_contact_get_xml(contact);
-		if ((result = xslt_transform(plgdata->xslt_ctx_gcont,
+		if ((result = xslt_transform(plgdata->cont.xslt_google2osync,
 					     raw_xml)))
 			goto error;
 
-		raw_xml = (char*) plgdata->xslt_ctx_gcont->xml_str;
+		raw_xml = (char*) plgdata->cont.xslt_google2osync->xml_str;
 		odata = osync_data_new(strdup(raw_xml),
 				       strlen(raw_xml),
-				       plgdata->gcont_format, &error);
+				       plgdata->cont.format, &error);
 		if (!odata)
 			goto cleanup;
 
@@ -677,7 +666,7 @@ no_changes:
 	// Load XSLT style to convert osync xmlformat-contact --> gdata
 	snprintf(buffer, sizeof(buffer) - 1, "%sosync2gcont.xslt",
 		 plgdata->xslt_path);
-	if ((result = xslt_initialize(plgdata->xslt_ctx_gcont, buffer))) {
+	if ((result = xslt_initialize(plgdata->cont.xslt_google2osync, buffer))) {
 		msg = "Cannot initialize new XSLT!\n";
 		goto error;
 	}
@@ -694,6 +683,7 @@ cleanup:
 	osync_error_unref(&error);
 	// osync_sink_state_get uses osync_strdup
 	osync_free(timestamp);
+	gcal_cleanup_contacts(&all_contacts);
 
 error:
 	osync_context_report_error(ctx, OSYNC_ERROR_GENERIC, "%s", msg);
@@ -737,7 +727,7 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		}
 
 		// Convert to gdata format
-		result = xslt_transform(plgdata->xslt_ctx_ocal, osync_xml);
+		result = xslt_transform(plgdata->cal.xslt_osync2google, osync_xml);
 		if( result ) {
 			msg = "Failed converting from osync xmlevent to gcalendar\n";
 			osync_trace(TRACE_INTERNAL, "--- osync_uid: %s",
@@ -748,9 +738,9 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		}
 
 		osync_trace(TRACE_INTERNAL, "--- transformed xml: %s",
-				(char*) plgdata->xslt_ctx_ocal->xml_str);
+				(char*) plgdata->cal.xslt_osync2google->xml_str);
 
-		raw_xml = vtime2gtime((char*)plgdata->xslt_ctx_ocal->xml_str);
+		raw_xml = vtime2gtime((char*)plgdata->cal.xslt_osync2google->xml_str);
 		osync_trace(TRACE_INTERNAL, "--- gtime adjusted: %s", raw_xml);
 	}
 
@@ -764,14 +754,14 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 	switch( osync_change_get_changetype(change) )
 	{
 	case OSYNC_CHANGE_TYPE_ADDED:
-		result = gcal_add_xmlentry(plgdata->calendar, raw_xml,
+		result = gcal_add_xmlentry(plgdata->cal.handle, raw_xml,
 							&updated_event);
 		if( result == -1 ) {
 			msg = "Failed adding new event!\n";
 			osync_trace(TRACE_INTERNAL, "Failed adding new event! HTTP code: %d, %s, %s\n",
-				gcal_status_httpcode(plgdata->calendar),
-				gcal_status_msg(plgdata->calendar),
-				gcal_access_buffer(plgdata->calendar));
+				gcal_status_httpcode(plgdata->cal.handle),
+				gcal_status_msg(plgdata->cal.handle),
+				gcal_access_buffer(plgdata->cal.handle));
 			goto error;
 		}
 
@@ -801,15 +791,15 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			goto error;
 		}
 
-		result = gcal_update_xmlentry(plgdata->calendar, raw_xml,
+		result = gcal_update_xmlentry(plgdata->cal.handle, raw_xml,
 			&updated_event, osync_change_get_uid(change), etag);
 		if( result == -1 ) {
 			msg = "Failed editing event!\n";
 			osync_trace(TRACE_INTERNAL, "Failed editing event: (etag: %s). HTTP code: %d, %s, %s\n",
 				etag,
-				gcal_status_httpcode(plgdata->calendar),
-				gcal_status_msg(plgdata->calendar),
-				gcal_access_buffer(plgdata->calendar));
+				gcal_status_httpcode(plgdata->cal.handle),
+				gcal_status_msg(plgdata->cal.handle),
+				gcal_access_buffer(plgdata->cal.handle));
 			goto error;
 		}
 
@@ -849,13 +839,13 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 			goto error;
 		}
 
-		result = gcal_erase_event(plgdata->calendar, event);
+		result = gcal_erase_event(plgdata->cal.handle, event);
 		if( result == -1 ) {
 			msg = "Failed deleting event!\n";
 			osync_trace(TRACE_INTERNAL, "Failed deleting event! HTTP code: %d, %s, %s\n",
-				gcal_status_httpcode(plgdata->calendar),
-				gcal_status_msg(plgdata->calendar),
-				gcal_access_buffer(plgdata->calendar));
+				gcal_status_httpcode(plgdata->cal.handle),
+				gcal_status_msg(plgdata->cal.handle),
+				gcal_access_buffer(plgdata->cal.handle));
 			goto error;
 		}
 
@@ -875,19 +865,19 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 
 	if( event && gcal_event_get_updated(event) ) {
 		// update the timestamp
-		if( plgdata->cal_timestamp ) {
+		if( plgdata->cal.timestamp ) {
 			// only if newer
-			if( timestamp_cmp(gcal_event_get_updated(event), plgdata->cal_timestamp) > 0 ) {
-				free(plgdata->cal_timestamp);
-				plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
+			if( timestamp_cmp(gcal_event_get_updated(event), plgdata->cal.timestamp) > 0 ) {
+				free(plgdata->cal.timestamp);
+				plgdata->cal.timestamp = strdup(gcal_event_get_updated(event));
 			}
 		}
 		else {
-			plgdata->cal_timestamp = strdup(gcal_event_get_updated(event));
+			plgdata->cal.timestamp = strdup(gcal_event_get_updated(event));
 		}
 
 		// error check
-		if (!plgdata->cal_timestamp) {
+		if (!plgdata->cal.timestamp) {
 			msg = "Failed copying contact timestamp!\n";
 			goto error;
 		}
@@ -940,20 +930,20 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 	}
 
 	// Convert to gdata format
-	if ((result = xslt_transform(plgdata->xslt_ctx_gcont, osync_xml))) {
+	if ((result = xslt_transform(plgdata->cont.xslt_google2osync, osync_xml))) {
 		msg = "Failed converting from osync xmlcontact to gcontact\n";
 		goto error;
 	}
-	raw_xml = vtime2gtime( (char*) plgdata->xslt_ctx_gcont->xml_str );
+	raw_xml = vtime2gtime( (char*) plgdata->cont.xslt_google2osync->xml_str );
 
 	osync_trace(TRACE_INTERNAL, "osync: %s\ngcont: %s\n\n", osync_xml, raw_xml);
 
 	switch (osync_change_get_changetype(change)) {
 		case OSYNC_CHANGE_TYPE_ADDED:
-			result = gcal_add_xmlentry(plgdata->contacts, raw_xml, &updated_contact);
+			result = gcal_add_xmlentry(plgdata->cont.handle, raw_xml, &updated_contact);
 			if (result == -1) {
 				msg = "Failed adding new contact!\n";
-				result = gcal_status_httpcode(plgdata->contacts);
+				result = gcal_status_httpcode(plgdata->cont.handle);
 				goto error;
 			}
 
@@ -964,7 +954,7 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 		break;
 
 		case OSYNC_CHANGE_TYPE_MODIFIED:
-			result = gcal_update_xmlentry(plgdata->contacts,
+			result = gcal_update_xmlentry(plgdata->cont.handle,
 				raw_xml, &updated_contact, NULL, NULL);
 			if (result == -1) {
 				msg = "Failed editing contact!\n";
@@ -978,7 +968,7 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 		break;
 
 		case OSYNC_CHANGE_TYPE_DELETED:
-			result = gcal_erase_xmlentry(plgdata->contacts, raw_xml);
+			result = gcal_erase_xmlentry(plgdata->cont.handle, raw_xml);
 			if (result == -1) {
 				msg = "Failed deleting contact!\n";
 				goto error;
@@ -997,10 +987,10 @@ static void gc_commit_change_contact(OSyncObjTypeSink *sink,
 
 	if (contact) {
 		// update the timestamp
-		if (plgdata->cont_timestamp)
-			free(plgdata->cont_timestamp);
-		plgdata->cont_timestamp = strdup(gcal_contact_get_updated(contact));
-		if (!plgdata->cont_timestamp) {
+		if (plgdata->cont.timestamp)
+			free(plgdata->cont.timestamp);
+		plgdata->cont.timestamp = strdup(gcal_contact_get_updated(contact));
+		if (!plgdata->cont.timestamp) {
 			msg = "Failed copying contact timestamp!\n";
 			goto error;
 		}
@@ -1035,19 +1025,19 @@ static void gc_sync_done(OSyncObjTypeSink *sink, OSyncPluginInfo *info,
 	struct gc_plgdata *plgdata = data;
 	OSyncError *state_db_error;
 
-	if (plgdata->calendar && plgdata->cal_timestamp) {
+	if (plgdata->cal.handle && plgdata->cal.timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
-				    plgdata->cal_timestamp);
+				    plgdata->cal.timestamp);
 		osync_sink_state_set(osync_objtype_sink_get_state_db(sink),
-				    "cal_timestamp", plgdata->cal_timestamp,
+				    "cal_timestamp", plgdata->cal.timestamp,
 				    &state_db_error);
 	}
 
-	if (plgdata->contacts && plgdata->cont_timestamp) {
+	if (plgdata->cont.handle && plgdata->cont.timestamp) {
 		osync_trace(TRACE_INTERNAL, "query updated timestamp: %s\n",
-				    plgdata->cont_timestamp);
+				    plgdata->cont.timestamp);
 		osync_sink_state_set(osync_objtype_sink_get_state_db(sink),
-				    "cont_timestamp", plgdata->cont_timestamp,
+				    "cont_timestamp", plgdata->cont.timestamp,
 				    &state_db_error);
 	}
 
@@ -1094,24 +1084,24 @@ static void *gc_initialize(OSyncPlugin *plugin,
 			osync_plugin_resource_get_objtype(r->data));
 
 		if( !strcmp(osync_plugin_resource_get_objtype(r->data), "event") ) {
-			plgdata->calendar = gcal_new(GCALENDAR);
-			if( !plgdata->calendar )
+			plgdata->cal.handle = gcal_new(GCALENDAR);
+			if( !plgdata->cal.handle )
 				goto error_freeplg;
 			else {
 				osync_trace(TRACE_INTERNAL,
 						"\tcreated calendar obj!\n");
-				gcal_set_store_xml(plgdata->calendar, 1);
+				gcal_set_store_xml(plgdata->cal.handle, 1);
 			}
 		}
 
 		if( !strcmp(osync_plugin_resource_get_objtype(r->data), "contact") ) {
-			plgdata->contacts = gcal_new(GCONTACT);
-			if( !plgdata->contacts )
+			plgdata->cont.handle = gcal_new(GCONTACT);
+			if( !plgdata->cont.handle )
 				goto error_freeplg;
 			else {
 				osync_trace(TRACE_INTERNAL,
 						"\tcreated contact obj!\n");
-				gcal_set_store_xml(plgdata->contacts, 1);
+				gcal_set_store_xml(plgdata->cont.handle, 1);
 			}
 		}
 
@@ -1161,16 +1151,16 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	if( !sink ) {
 		osync_trace(TRACE_ERROR, "%s", "Failed to find objtype event!");
 	}
-	if( sink && osync_objtype_sink_is_enabled(sink) && plgdata->calendar ) {
+	if( sink && osync_objtype_sink_is_enabled(sink) && plgdata->cal.handle ) {
 
 		osync_trace(TRACE_INTERNAL, "\tcreating calendar sink...\n");
 		OSyncFormatEnv *formatenv = osync_plugin_info_get_format_env(info);
-		plgdata->gcal_format = osync_format_env_find_objformat(formatenv, "xmlformat-event-doc");
-		if (!plgdata->gcal_format) {
+		plgdata->cal.format = osync_format_env_find_objformat(formatenv, "xmlformat-event-doc");
+		if (!plgdata->cal.format) {
 			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-event!");
 			goto error_freeplg;
 		}
-		osync_objformat_ref(plgdata->gcal_format);
+		osync_objformat_ref(plgdata->cal.format);
 
 
 		osync_objtype_sink_set_connect_func(sink, gc_connect_calendar);
@@ -1196,16 +1186,16 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	if( !sink ) {
 		osync_trace(TRACE_ERROR, "%s", "Failed to find objtype contact!");
 	}
-	if( sink && osync_objtype_sink_is_enabled(sink) && plgdata->contacts ) {
+	if( sink && osync_objtype_sink_is_enabled(sink) && plgdata->cont.handle ) {
 
 		osync_trace(TRACE_INTERNAL, "\tcreating contact sink...\n");
 		OSyncFormatEnv *formatenv = osync_plugin_info_get_format_env(info);
-		plgdata->gcont_format = osync_format_env_find_objformat(formatenv, "xmlformat-contact-doc");
-		if (!plgdata->gcont_format) {
+		plgdata->cont.format = osync_format_env_find_objformat(formatenv, "xmlformat-contact-doc");
+		if (!plgdata->cont.format) {
 			osync_trace(TRACE_ERROR, "%s", "Failed to find objformat xmlformat-contact!");
 			goto error_freeplg;
 		}
-		osync_objformat_ref(plgdata->gcont_format);
+		osync_objformat_ref(plgdata->cont.format);
 
 
 		osync_objtype_sink_set_connect_func(sink, gc_connect_contact);
@@ -1222,19 +1212,19 @@ static void *gc_initialize(OSyncPlugin *plugin,
 	}
 
 
-	if( plgdata->calendar ) {
-		plgdata->xslt_ctx_gcal = xslt_new();
-		plgdata->xslt_ctx_ocal = xslt_new();
-		if (!plgdata->xslt_ctx_gcal || !plgdata->xslt_ctx_ocal)
+	if( plgdata->cal.handle ) {
+		plgdata->cal.xslt_google2osync = xslt_new();
+		plgdata->cal.xslt_osync2google = xslt_new();
+		if (!plgdata->cal.xslt_google2osync || !plgdata->cal.xslt_osync2google)
 			goto error_freeplg;
 		else
 			osync_trace(TRACE_INTERNAL, "\tsucceed creating xslt_gcal!\n");
 	}
 
-	if( plgdata->contacts ) {
-		plgdata->xslt_ctx_gcont = xslt_new();
-		plgdata->xslt_ctx_ocont = xslt_new();
-		if (!plgdata->xslt_ctx_gcont || !plgdata->xslt_ctx_ocont)
+	if( plgdata->cont.handle ) {
+		plgdata->cont.xslt_google2osync = xslt_new();
+		plgdata->cont.xslt_osync2google = xslt_new();
+		if (!plgdata->cont.xslt_google2osync || !plgdata->cont.xslt_osync2google)
 			goto error_freeplg;
 		else
 			osync_trace(TRACE_INTERNAL, "\tsucceed creating xslt_gcont!\n");
