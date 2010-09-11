@@ -332,7 +332,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 	if( !state_db )
 		goto error;
 
-	timestamp = osync_sink_state_get(state_db, "cal_timestamp",
+	timestamp = osync_sink_state_get(state_db, gdata->timestamp_name,
 						&state_db_error);
 	if (!timestamp) {
 		msg = "gcalendar: Anchor returned is NULL!";
@@ -537,7 +537,8 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 		goto error;
 
 	timestamp = osync_sink_state_get(osync_objtype_sink_get_state_db(sink),
-					  "cont_timestamp", &state_db_error);
+					  gdata->timestamp_name,
+					  &state_db_error);
 	if (!timestamp) {
 		msg = "gcontact: Anchor returned is NULL!";
 		goto error;
