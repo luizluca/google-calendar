@@ -819,7 +819,8 @@ static void gc_commit_change_calendar(OSyncObjTypeSink *sink,
 		}
 
 		result = gcal_update_xmlentry(gdata->handle, raw_xml,
-			&updated_event, osync_change_get_uid(change), etag);
+			&updated_event, (char*)osync_change_get_uid(change),
+			etag);
 		if( result == -1 ) {
 			msg = "Failed editing event!\n";
 			osync_trace(TRACE_INTERNAL, "Failed editing event: (etag: %s). HTTP code: %d, %s, %s\n",
