@@ -2,8 +2,6 @@ PROJECT( libopensync-plugin-google-calendar C )
 
 SET( VERSION "0.39" )
 
-SET( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules" )
-
 SET( OPENSYNC_MIN_VERSION "0.39" )
 SET( LIBGCAL_MIN_VERSION "0.9.6" )
 SET( Libgcal_FIND_REQUIRED "yes" )
