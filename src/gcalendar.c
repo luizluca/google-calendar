@@ -439,7 +439,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 			}
 
 			// the etag will have changed for MODIFIED, and
-			// it's a new item if ADDED, so save the url/etag 
+			// it's a new item if ADDED, so save the url/etag
 			// string either way
 			// FIXME - should perhaps set this only after
 			// success, such as in the done() plugin call
@@ -643,7 +643,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 			}
 
 			// the etag will have changed for MODIFIED, and
-			// it's a new item if ADDED, so save the url/etag 
+			// it's a new item if ADDED, so save the url/etag
 			// string either way
 			// FIXME - should perhaps set this only after
 			// success, such as in the done() plugin call
@@ -1316,9 +1316,9 @@ osync_bool get_sync_info(OSyncPluginEnv *env, OSyncError **error)
 	osync_plugin_set_description(plugin,
 		"Google calendar and contacts plugin");
 
-	osync_plugin_set_initialize(plugin, gc_initialize);
-	osync_plugin_set_finalize(plugin, gc_finalize);
-	osync_plugin_set_discover(plugin, gc_discover);
+	osync_plugin_set_initialize_func(plugin, gc_initialize);
+	osync_plugin_set_finalize_func(plugin, gc_finalize);
+	osync_plugin_set_discover_func(plugin, gc_discover);
 	osync_plugin_set_start_type(plugin, OSYNC_START_TYPE_PROCESS);
 
 	if( !osync_plugin_env_register_plugin(env, plugin, error) )
