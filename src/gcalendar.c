@@ -360,7 +360,7 @@ static void gc_get_changes_calendar(OSyncObjTypeSink *sink,
 		osync_trace(TRACE_INTERNAL, "gcalendar: no changes...\n");
 		goto exit;
 	} else {
-		osync_trace(TRACE_INTERNAL, "gcalendar: changes count: %d\n",
+		osync_trace(TRACE_INTERNAL, "gcalendar: changes count: %lu\n",
 			    all_events.length);
 	}
 
@@ -565,7 +565,7 @@ static void gc_get_changes_contact(OSyncObjTypeSink *sink,
 		osync_trace(TRACE_INTERNAL, "gcontact: no changes...\n");
 		goto exit;
 	} else
-		osync_trace(TRACE_INTERNAL, "gcontact: changes count: %d\n",
+		osync_trace(TRACE_INTERNAL, "gcontact: changes count: %lu\n",
 			    all_contacts.length);
 
 	// Contacts returns most recently updated entry as last element
