@@ -41,19 +41,19 @@
 #include <opensync/opensync-format.h>
 #include <opensync/opensync-time.h>
 
-static osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
+static osync_bool xmlcontact_to_gcontact(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 				  char **output, unsigned int *outpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error);
-static osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
+static osync_bool xmlevent_to_gevent(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error);
-static osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
+static osync_bool gcontact_to_xmlcontact(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 				  char **output, unsigned int *outpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error);
-static osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
+static osync_bool gevent_to_xmlevent(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error);
@@ -62,7 +62,7 @@ static osync_bool gc_data_finalize(void *userdata, OSyncError **error);
 
 
 
-static osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
+static osync_bool xmlcontact_to_gcontact(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 				  char **output, unsigned int *outpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error)
@@ -71,7 +71,7 @@ static osync_bool xmlcontact_to_gcontact(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-static osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
+static osync_bool xmlevent_to_gevent(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error)
@@ -80,7 +80,7 @@ static osync_bool xmlevent_to_gevent(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-static osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
+static osync_bool gcontact_to_xmlcontact(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 				  char **output, unsigned int *outpsize,
 				  osync_bool *free_input, const char *config,
 				  void *userdata, OSyncError **error)
@@ -89,7 +89,7 @@ static osync_bool gcontact_to_xmlcontact(char *input, unsigned int inpsize,
 	return FALSE;
 }
 
-static osync_bool gevent_to_xmlevent(char *input, unsigned int inpsize,
+static osync_bool gevent_to_xmlevent(OSyncFormatConverter *converter, char *input, unsigned int inpsize,
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error)

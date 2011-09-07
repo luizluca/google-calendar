@@ -1275,7 +1275,7 @@ error_freeplg:
 	return NULL;
 }
 
-static osync_bool gc_discover(OSyncPluginInfo *info, void *data, OSyncError **error)
+static osync_bool gc_discover(OSyncPlugin *plugin, OSyncPluginInfo *info, void *data, OSyncError **error)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p, %p, %p)", __func__, data, info, error);
 
@@ -1295,7 +1295,7 @@ static osync_bool gc_discover(OSyncPluginInfo *info, void *data, OSyncError **er
 	return TRUE;
 }
 
-static void gc_finalize(void *data)
+static void gc_finalize(OSyncPlugin *plugin, void *data)
 {
 	osync_trace(TRACE_ENTRY, "%s(%p)", __func__, data);
 	struct gc_plgdata *plgdata = data;
