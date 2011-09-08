@@ -57,8 +57,8 @@ static osync_bool gevent_to_xmlevent(OSyncFormatConverter *converter, char *inpu
 			      char **output, unsigned int *outpsize,
 			      osync_bool *free_input, const char *config,
 			      void *userdata, OSyncError **error);
-static void *gc_data_initialize(const char *config, OSyncError **error);
-static osync_bool gc_data_finalize(void *userdata, OSyncError **error);
+static void *gc_data_initialize(OSyncFormatConverter *converter, const char *config, OSyncError **error);
+static osync_bool gc_data_finalize(OSyncFormatConverter *converter, void *userdata, OSyncError **error);
 
 
 
@@ -98,22 +98,22 @@ static osync_bool gevent_to_xmlevent(OSyncFormatConverter *converter, char *inpu
 	return FALSE;
 }
 
-static void *gc_data_initialize(const char *config, OSyncError **error)
+static void *gc_data_initialize(OSyncFormatConverter* converter, const char* config, OSyncError** error)
 {
-	struct xslt_resources *converter = NULL;
-	converter = xslt_new();
+	struct xslt_resources *xslt_converter = NULL;
+	xslt_converter = xslt_new();
 
-	return converter;
+	return xslt_converter;
 }
 
-static osync_bool gc_data_finalize(void *userdata, OSyncError **error)
+static osync_bool gc_data_finalize(OSyncFormatConverter* converter, void* userdata, OSyncError** error)
 {
-	struct xslt_resources *converter = NULL;
+	struct xslt_resources *xslt_converter = NULL;
 	if (!userdata)
 		return TRUE;
 
-	converter = (struct xslt_resources *)userdata;
-	xslt_delete(converter);
+	xslt_converter = (struct xslt_resources *)userdata;
+	xslt_delete(xslt_converter);
 	return TRUE;
 }
 
